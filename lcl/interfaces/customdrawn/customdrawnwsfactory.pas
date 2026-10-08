@@ -106,6 +106,7 @@ implementation
 uses
  CheckLst,
  CustomDrawnWSButtons,
+ {$ifdef CPUWASM32}CustomDrawnWasmDOM,{$endif}
 { WinCEWSCalendar,}
  customdrawnwschecklst,
  CustomDrawnWSComCtrls,
@@ -322,13 +323,21 @@ end;
 
 function RegisterCustomButton: Boolean; alias : 'WSRegisterCustomButton';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TCustomButton, TBrowserWSButton);
+  {$else}
   RegisterWSComponent(TCustomButton, TCDWSButton);
+  {$endif}
   Result := True;
 end;
 
 function RegisterCustomCheckBox: Boolean; alias : 'WSRegisterCustomCheckBox';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TCustomCheckBox, TBrowserWSCheckBox);
+  {$else}
   RegisterWSComponent(TCustomCheckBox, TCDWSCustomCheckBox);
+  {$endif}
   Result := True;
 end;
 

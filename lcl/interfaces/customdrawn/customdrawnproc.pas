@@ -74,6 +74,7 @@ type
     WinControl: TWinControl;
     CDControl: TCDControl;
     CDControlInjected: Boolean;
+    {$ifdef CD_Wasm}BrowserDOM: Boolean;{$endif}
     procedure UpdateImageAndCanvas; override;
     function IsControlBackgroundVisible: Boolean; override;
     function GetWinControl: TWinControl; override;
@@ -189,6 +190,7 @@ function GetForm(AIndex: Integer): TCDNonNativeForm;
 function GetFormCount(): Integer;
 function AddNewForm(AForm: TCustomForm): TCDNonNativeForm;
 procedure AddFormWithCDHandle(AHandle: TCDForm);
+{$ifdef CD_Wasm}procedure RemoveBrowserForm(AForm: TCDNonNativeForm);{$endif}
 function FindFormWithNativeHandle(AHandle: HWND): TCDForm;
 procedure ShowForm(ACDForm: TCDNonNativeForm);
 procedure HideForm(ACDForm: TCDNonNativeForm);
@@ -316,6 +318,18 @@ begin
   InitNonNativeForms();
   NonNativeForms.Insert(0, AHandle);
 end;
+
+{$ifdef CD_Wasm}
+procedure RemoveBrowserForm(AForm: TCDNonNativeForm);
+begin
+  if AForm = nil then Exit;
+  NonNativeForms.Remove(AForm);
+  if lCurrentForm = AForm then lCurrentForm := FindTopMostVisibleForm;
+  AForm.Canvas.Free;
+  AForm.Image.Free;
+  AForm.Free;
+end;
+{$endif}
 
 function FindFormWithNativeHandle(AHandle: HWND): TCDForm;
 var
@@ -537,6 +551,9 @@ var
 begin
   Result := False;
 
+  {$ifdef CD_Wasm}
+  if ACDWinControl.BrowserDOM then Exit;
+  {$endif}
   lWinControl := ACDWinControl.WinControl;
 
   {$ifdef VerboseCDWinControl}

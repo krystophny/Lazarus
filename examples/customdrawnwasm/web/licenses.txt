@@ -1,0 +1,19 @@
+LICENSES AND CORRESPONDING SOURCE
+
+The Pascal example, test scripts and browser host entry point are MIT licensed.
+Source: https://github.com/krystophny/Lazarus/tree/feature/customdrawn-wasm-first-app/examples/customdrawnwasm
+Free Pascal runtime and JOB units: modified Library GPL with linking exception. Source: https://gitlab.com/freepascal.org/fpc/source/-/tree/86125b587067db5bc22f5fa12426aacd7fd9d4e0
+License texts: source/fpc-COPYING.FPC and source/fpc-COPYING.txt
+
+Pas2JS runtime, JOB browser implementation and environment: modified LGPL with linking exception. Base source: https://gitlab.com/freepascal.org/fpc/pas2js/-/tree/fa10c59214cd226c60af465c831d66a7321f0214
+The fixed JOB browser source is supplied at source/job_browser.pp.
+Fix commit: https://gitlab.com/krystophny/pas2js/-/commit/b69f26b05baeacb0e2da29df3e33d21b28fbe277
+Upstream MR: https://gitlab.com/freepascal.org/fpc/pas2js/-/merge_requests/103
+License texts: source/pas2js-LICENSE and source/pas2js-COPYING.txt
+
+LCL demo links Lazarus LCL under its modified LGPL with linking exception. Base source: https://gitlab.com/freepascal.org/lazarus/lazarus/-/tree/ee000f4ee91ada21146bf79d5890f43c79f2f77e
+Experimental branch: https://github.com/krystophny/Lazarus/tree/feature/customdrawn-wasm-first-app
+License texts: source/lcl-COPYING.modifiedLGPL.txt and source/lcl-COPYING.LGPL.txt
+
+@bjorn3/browser_wasi_shim 0.4.2: MIT option. Source: https://github.com/bjorn3/browser_wasi_shim
+License text: source/wasi-shim-LICENSE-MIT
