@@ -28,7 +28,7 @@ type
   end;
 procedure SyncBrowserDOM;
 implementation
-uses CustomDrawnWSControls, LCLMessageGlue, LCLIntf;
+uses CustomDrawnWSControls, LCLMessageGlue, LCLIntf, CustomDrawnInt;
 type
   TDOMControl = class
     Control: TWinControl;
@@ -66,6 +66,7 @@ begin
   if Control is TCustomCheckBox then LCLSendChangedMsg(Control)
   else LCLSendClickedMsg(Control);
   LCLIntf.InvalidateRect(Control.Handle, nil, False);
+  LCLWasmIdle;
 end;
 
 procedure TDOMControl.Sync;

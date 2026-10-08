@@ -11,10 +11,39 @@ procedure BrowserText(Data: Pointer; Width, Height, X, Y: LongInt;
   Text: PChar; Count, FontSize, Color, ClipLeft, ClipTop, ClipRight, ClipBottom: LongInt);
   external 'lcl' name 'text';
 
+type
+  TBrowserApplication = class(TApplication);
+
 var
+  { Set by any invalidation; frames without it skip composing and presenting. }
+  BrowserDirty: Boolean = True;
+  BrowserInIdle: Boolean = False;
   BrowserWidth: LongInt = 720;
   BrowserHeight: LongInt = 480;
   BrowserMouse: TPoint;
+
+{ Browser events arrive as separate callbacks without a native message loop.
+  Run the idle work TApplication.HandleMessage performs after each message:
+  queued async calls, released components, OnIdle and action updates. }
+procedure LCLWasmIdle;
+const
+  MaxPasses = 16;
+var
+  Pass: Integer;
+begin
+  if (Application = nil) or BrowserInIdle then Exit;
+  BrowserInIdle := True;
+  try
+    Pass := 0;
+    repeat
+      Application.Idle(False);
+      Inc(Pass);
+    until not TBrowserApplication(Application).HasAsyncCallQueued or (Pass >= MaxPasses);
+  finally
+    BrowserInIdle := False;
+  end;
+  BrowserInvalidate;
+end;
 
 procedure LCLWasmRender; cdecl;
 var
@@ -23,9 +52,11 @@ var
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
+  SyncBrowserDOM;
+  if not BrowserDirty then Exit;
+  BrowserDirty := False;
   UpdateControlLazImageAndCanvas(Form.Image, Form.Canvas,
     Form.LCLForm.ClientWidth, Form.LCLForm.ClientHeight, clfARGB32);
-  SyncBrowserDOM;
   RenderForm(Form.Image, Form.Canvas, Form.LCLForm);
   Form.Image.GetRawImage(Raw);
   BrowserPresent(Raw.Data, Form.Image.Width, Form.Image.Height);
@@ -53,24 +84,25 @@ begin
     1: CallbackMouseUp(Form, X, Y, MouseButton, Shift);
     2: CallbackMouseMove(Form, X, Y, Shift);
   end;
-  BrowserInvalidate;
+  LCLWasmIdle;
 end;
 
 procedure LCLWasmResize(Width, Height: LongInt); cdecl;
 var
   Form: TCDNonNativeForm;
 begin
+  BrowserDirty := True;
   BrowserWidth := Max(1, Width);
   BrowserHeight := Max(1, Height);
   Form := GetCurrentForm;
   if Form <> nil then Form.LCLForm.SetBounds(0, 0, BrowserWidth, BrowserHeight);
-  BrowserInvalidate;
+  LCLWasmIdle;
 end;
 
 procedure LCLWasmTimer(Handle: LongInt); cdecl;
 begin
   TCDTimer(PtrUInt(Handle)).TimerFunc;
-  BrowserInvalidate;
+  LCLWasmIdle;
 end;
 
 function TCDWidgetSet.GetAppHandle: TLCLHandle;
@@ -106,7 +138,7 @@ end;
 procedure TCDWidgetSet.AppRun(const ALoop: TApplicationMainLoop);
 begin
   { The browser owns the outer loop; the WASM reactor stays alive after returning. }
-  BrowserInvalidate;
+  LCLWasmIdle;
 end;
 
 procedure TCDWidgetSet.AppMinimize;
@@ -116,11 +148,13 @@ end;
 
 procedure TCDWidgetSet.AppRestore;
 begin
+  BrowserDirty := True;
   BrowserInvalidate;
 end;
 
 procedure TCDWidgetSet.AppBringToFront;
 begin
+  BrowserDirty := True;
   BrowserInvalidate;
 end;
 
@@ -151,6 +185,7 @@ end;
 
 procedure TCDWidgetSet.AppSetVisible(const AVisible: Boolean);
 begin
+  BrowserDirty := True;
   BrowserInvalidate;
 end;
 

@@ -585,6 +585,7 @@ procedure LCLWasmRender; cdecl;
 procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
 procedure LCLWasmResize(Width, Height: LongInt); cdecl;
 procedure LCLWasmTimer(Handle: LongInt); cdecl;
+procedure LCLWasmIdle;
 {$endif}
 
 implementation
