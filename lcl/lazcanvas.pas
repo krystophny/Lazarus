@@ -40,7 +40,7 @@ uses
   // FCL-Image
   fpimgcanv, fpcanvas, fpimage, clipping, pixtools, fppixlcanv,
   // LCL
-  IntfGraphics, LazRegions
+  GraphType, IntfGraphics, LazRegions
   {$if defined(lazcanvas_debug) or defined(lazcanvas_profiling)}
   , LazSysUtils, LazLoggerBase
   {$endif}
@@ -137,6 +137,8 @@ type
     procedure AlphaBlend_Image(ASource: TFPCustomImage;
       const ADestX, ADestY, ASourceX, ASourceY, ASourceWidth, ASourceHeight: Integer);
     procedure DoDrawImage(x,y:integer; const AImage: TFPCustomImage);
+    function FastCanvasCopyRect(ASource: TFPCustomCanvas; const ADestX, ADestY,
+      ASourceX, ASourceY, ADrawWidth, ADrawHeight: Integer): Boolean;
     procedure CanvasCopyRect(ASource: TFPCustomCanvas;
       const ADestX, ADestY, ASourceX, ASourceY, ASourceWidth, ASourceHeight: Integer);
     // Fills the entire drawing with a color
@@ -771,6 +773,76 @@ begin
   DoDraw(x, y, AImage);
 end;
 
+// Copies whole rows when both images share one 32-bit layout. The result is
+// identical to the per-pixel loop of CanvasCopyRect: the source is read without
+// window origin, destination pixels need DestX, DestY >= 0 and lie inside the image and
+// the clip region. Returns False when that cannot be done row-wise.
+function TLazCanvas.FastCanvasCopyRect(ASource: TFPCustomCanvas; const ADestX,
+  ADestY, ASourceX, ASourceY, ADrawWidth, ADrawHeight: Integer): Boolean;
+var
+  SrcImage, DestImage: TLazIntfImage;
+  Clip: TRect;
+  X0, X1, Y, Count, I, AlphaByte: Integer;
+  Src, Dest: PByte;
+begin
+  Result := False;
+  if (ADrawWidth <= 0) or (ADrawHeight <= 0) then Exit(True);
+  if not (ASource is TFPImageCanvas) or not (Image is TLazIntfImage) then Exit;
+  if not (TFPImageCanvas(ASource).Image is TLazIntfImage) then Exit;
+  SrcImage := TLazIntfImage(TFPImageCanvas(ASource).Image);
+  DestImage := TLazIntfImage(Image);
+  with SrcImage.DataDescription do
+    if (Format <> ricfRGBA) or (BitsPerPixel <> 32) or (LineOrder <> riloTopToBottom)
+      or (RedPrec <> 8) or (GreenPrec <> 8) or (BluePrec <> 8)
+      or (RedShift <> DestImage.DataDescription.RedShift)
+      or (GreenShift <> DestImage.DataDescription.GreenShift)
+      or (BlueShift <> DestImage.DataDescription.BlueShift)
+      or (ByteOrder <> DestImage.DataDescription.ByteOrder)
+      or (BitOrder <> DestImage.DataDescription.BitOrder) then Exit;
+  with DestImage.DataDescription do
+    if (Format <> ricfRGBA) or (BitsPerPixel <> 32) or (LineOrder <> riloTopToBottom)
+      or (RedPrec <> 8) or (GreenPrec <> 8) or (BluePrec <> 8)
+      or not (AlphaPrec in [0, 8]) then Exit;
+  if (SrcImage.DataDescription.AlphaPrec <> 0) and
+    (SrcImage.DataDescription.AlphaPrec <> DestImage.DataDescription.AlphaPrec) then Exit;
+  // Source pixels outside the source image would be written as transparent.
+  if (ASourceX < 0) or (ASourceY < 0) or (ASourceX + ADrawWidth > SrcImage.Width)
+    or (ASourceY + ADrawHeight > SrcImage.Height) then Exit;
+  // Clip in destination image coordinates, end-exclusive.
+  Clip := Rect(0, 0, Width, Height);
+  if Clipping then
+  begin
+    if not (FClipRegion is TLazRegion) then Exit;
+    if not TLazRegion(FClipRegion).IsSimpleRectRegion then Exit;
+    // TLazRegion.IsPointInRegion includes Right and Bottom of a simple rectangle.
+    with TLazRegion(FClipRegion).Rect do
+      Clip := Rect(Max(Clip.Left, Left), Max(Clip.Top, Top),
+        Min(Clip.Right, Right + 1), Min(Clip.Bottom, Bottom + 1));
+  end;
+  X0 := Max(Max(0, -ADestX), Clip.Left - ADestX - FWindowOrg.X);
+  X1 := Min(ADrawWidth, Clip.Right - ADestX - FWindowOrg.X);
+  Count := X1 - X0;
+  AlphaByte := -1;
+  if (SrcImage.DataDescription.AlphaPrec = 0) and (DestImage.DataDescription.AlphaPrec = 8) then
+  begin
+    AlphaByte := DestImage.DataDescription.AlphaShift div 8;
+    if DestImage.DataDescription.ByteOrder = riboMSBFirst then AlphaByte := 3 - AlphaByte;
+  end;
+  if Count > 0 then
+    for Y := Max(Max(0, -ADestY), Clip.Top - ADestY - FWindowOrg.Y)
+      to Min(ADrawHeight, Clip.Bottom - ADestY - FWindowOrg.Y) - 1 do
+    begin
+      Src := SrcImage.GetDataLineStart(ASourceY + Y) + (ASourceX + X0) * 4;
+      Dest := DestImage.GetDataLineStart(ADestY + Y + FWindowOrg.Y)
+        + (ADestX + X0 + FWindowOrg.X) * 4;
+      Move(Src^, Dest^, Count * 4);
+      // Pixels without alpha are opaque, as TFPColor reads them.
+      if AlphaByte >= 0 then
+        for I := 0 to Count - 1 do Dest[I * 4 + AlphaByte] := $FF;
+    end;
+  Result := True;
+end;
+
 procedure TLazCanvas.CanvasCopyRect(ASource: TFPCustomCanvas; const ADestX, ADestY,
   ASourceX, ASourceY, ASourceWidth, ASourceHeight: Integer);
 var
@@ -828,6 +900,8 @@ begin
   // General case of copying
   else
   {$endif}
+  if not FastCanvasCopyRect(ASource, ADestX, ADestY, ASourceX, ASourceY,
+    lDrawWidth, lDrawHeight) then
   begin
     for y := 0 to lDrawHeight - 1 do
     begin
