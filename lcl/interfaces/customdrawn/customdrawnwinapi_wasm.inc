@@ -173,6 +173,7 @@ end;
 
 function TCDWidgetSet.BackendInvalidateRect(aHandle: HWND; Rect: pRect; bErase: Boolean): Boolean;
 begin
+  BrowserDirty := True;
   BrowserInvalidate;
   Result := True;
 end;

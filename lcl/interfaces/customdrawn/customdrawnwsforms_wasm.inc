@@ -80,16 +80,13 @@ end;
 
 class function TCDWSCustomForm.GetText(const AWinControl: TWinControl; var AText: String): Boolean;
 begin
-  AText := AWinControl.Caption;
-  Result := True;
+  { The browser keeps no separate title per form; LCL uses its cached caption. }
+  Result := False;
 end;
 
 class function TCDWSCustomForm.GetTextLen(const AWinControl: TWinControl; var ALength: Integer): Boolean;
-var
-  lText: string;
 begin
-  Result := GetText(AWinControl, lText);
-  ALength := Length(lText);
+  Result := False;
 end;
 
 class procedure TCDWSCustomForm.SetText(const AWinControl: TWinControl; const AText: String);
