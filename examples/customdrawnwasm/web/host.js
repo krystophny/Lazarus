@@ -7,11 +7,14 @@ const status = document.querySelector('#status');
 const textCanvas = document.createElement('canvas');
 const textContext = textCanvas.getContext('2d', {willReadFrequently: true});
 const decoder = new TextDecoder();
-let instance, ready = false, scheduled = false;
+let instance, ready = false, scheduled = false, image = null, pendingMove = null;
 const text = (pointer, length) => decoder.decode(new Uint8Array(instance.exports.memory.buffer, pointer, length));
 function fail(error) {
   ready = false;
-  status.textContent = `Application error: ${error.message || error}`;
+  // Name the innermost Pascal routines so a report locates the failure.
+  const frames = String(error.stack || '').match(/at [A-Z0-9_$]+\$\$?_?[A-Z0-9_$]*/g) || [];
+  const where = frames.slice(0, 6).map(frame => frame.slice(3)).join(' ← ');
+  status.textContent = `Application error: ${error.message || error}${where ? ` in ${where}` : ''}`;
   status.dataset.state = 'error';
   console.error(error);
 }
@@ -23,6 +26,7 @@ function invalidate() {
   scheduled = true;
   requestAnimationFrame(() => {
     scheduled = false;
+    flushMove();
     if (ready) guarded(() => instance.exports.lcl_render());
   });
 }
@@ -63,28 +67,43 @@ const imports = {
     if (canvas.height !== height) canvas.height = height;
     document.querySelector("#lcl-surface").style.width = `${width}px`;
     document.querySelector("#lcl-surface").style.height = `${height}px`;
-    const pixels = new Uint8Array(instance.exports.memory.buffer, pointer, width*height*4);
-    const image = context.createImageData(width, height);
-    for (let i=0; i<pixels.length; i+=4) {
-      image.data[i] = pixels[i+1];
-      image.data[i+1] = pixels[i+2];
-      image.data[i+2] = pixels[i+3];
-      image.data[i+3] = 255;
-    }
+    // LazCanvas clfARGB32 bytes A, R, G, B become canvas bytes R, G, B, A:
+    // one shift per little-endian word into a reused buffer.
+    if (!image || image.width !== width || image.height !== height) image = context.createImageData(width, height);
+    const source = new Uint32Array(instance.exports.memory.buffer, pointer, width*height);
+    const target = new Uint32Array(image.data.buffer);
+    for (let i=0; i<source.length; i++) target[i] = (source[i] >>> 8) | 0xFF000000;
     context.putImageData(image, 0, 0);
     canvas.dataset.frames = String(Number(canvas.dataset.frames || 0)+1);
   }
 };
+function pointer(kind, x, y, button, modifiers) {
+  if (ready) guarded(() => instance.exports.lcl_pointer(kind, x, y, button, modifiers));
+}
+// Moves are coalesced to one per frame; a pending move is delivered first so
+// presses and releases keep their order.
+function flushMove() {
+  if (!pendingMove) return;
+  const move = pendingMove;
+  pendingMove = null;
+  pointer(2, ...move);
+}
 for (const [name, kind] of [['pointerdown', 0], ['pointerup', 1], ['pointermove', 2]]) {
   canvas.addEventListener(name, event => {
     if (!ready) return;
     event.preventDefault();
-    if (kind === 0) { canvas.focus(); canvas.setPointerCapture(event.pointerId); }
+    if (kind === 0) { canvas.focus({preventScroll: true}); canvas.setPointerCapture(event.pointerId); }
     const bounds = canvas.getBoundingClientRect();
     const x = Math.round((event.clientX-bounds.left)*canvas.width/bounds.width);
     const y = Math.round((event.clientY-bounds.top)*canvas.height/bounds.height);
     const modifiers = Number(event.shiftKey) | Number(event.ctrlKey)<<1 | Number(event.altKey)<<2 | Number(event.buttons&1)<<3;
-    guarded(() => instance.exports.lcl_pointer(kind, x, y, event.button, modifiers));
+    if (kind === 2) {
+      pendingMove = [x, y, event.button, modifiers];
+      invalidate();
+      return;
+    }
+    flushMove();
+    pointer(kind, x, y, event.button, modifiers);
     if (kind === 1 && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   });
 }
