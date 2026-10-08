@@ -684,6 +684,8 @@ exports
   LCLWasmRender name 'lcl_render',
   LCLWasmPointer name 'lcl_pointer',
   LCLWasmResize name 'lcl_resize',
+  LCLWasmKey name 'lcl_key',
+  LCLWasmWheel name 'lcl_wheel',
   LCLWasmTimer name 'lcl_timer';
 {$endif}
 

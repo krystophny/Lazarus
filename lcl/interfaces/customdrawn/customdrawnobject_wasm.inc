@@ -21,6 +21,35 @@ var
   BrowserWidth: LongInt = 720;
   BrowserHeight: LongInt = 480;
   BrowserMouse: TPoint;
+  { Modifier mask reported by the browser host: 1 shift, 2 ctrl, 4 alt,
+    8 left button. CustomDrawn routing asks GetKeyState for these. }
+  BrowserMods: LongInt = 0;
+
+function BrowserShiftState(Mask: LongInt): TShiftState;
+begin
+  Result := [];
+  if (Mask and 1) <> 0 then Include(Result, ssShift);
+  if (Mask and 2) <> 0 then Include(Result, ssCtrl);
+  if (Mask and 4) <> 0 then Include(Result, ssAlt);
+  if (Mask and 8) <> 0 then Include(Result, ssLeft);
+end;
+
+{ One Unicode scalar as UTF-8, without pulling a codepage converter into the
+  browser target. }
+function BrowserUtf8(CodePoint: LongInt): TUTF8Char;
+begin
+  Result := '';
+  if CodePoint < $80 then
+    Result := Chr(CodePoint)
+  else if CodePoint < $800 then
+    Result := Chr($C0 or (CodePoint shr 6)) + Chr($80 or (CodePoint and $3F))
+  else if CodePoint < $10000 then
+    Result := Chr($E0 or (CodePoint shr 12)) + Chr($80 or ((CodePoint shr 6) and $3F)) +
+      Chr($80 or (CodePoint and $3F))
+  else if CodePoint < $110000 then
+    Result := Chr($F0 or (CodePoint shr 18)) + Chr($80 or ((CodePoint shr 12) and $3F)) +
+      Chr($80 or ((CodePoint shr 6) and $3F)) + Chr($80 or (CodePoint and $3F));
+end;
 
 { Browser events arrive as separate callbacks without a native message loop.
   Run the idle work TApplication.HandleMessage performs after each message:
@@ -66,24 +95,48 @@ procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
 var
   Form: TCDNonNativeForm;
   MouseButton: TMouseButton;
-  Shift: TShiftState;
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
   BrowserMouse := Point(X, Y);
+  BrowserMods := Modifiers;
   MouseButton := mbLeft;
   if Button = 1 then MouseButton := mbMiddle;
   if Button = 2 then MouseButton := mbRight;
-  Shift := [];
-  if (Modifiers and 1) <> 0 then Include(Shift, ssShift);
-  if (Modifiers and 2) <> 0 then Include(Shift, ssCtrl);
-  if (Modifiers and 4) <> 0 then Include(Shift, ssAlt);
-  if (Modifiers and 8) <> 0 then Include(Shift, ssLeft);
   case Kind of
-    0: CallbackMouseDown(Form, X, Y, MouseButton, Shift);
-    1: CallbackMouseUp(Form, X, Y, MouseButton, Shift);
-    2: CallbackMouseMove(Form, X, Y, Shift);
+    0: CallbackMouseDown(Form, X, Y, MouseButton, BrowserShiftState(Modifiers));
+    1: CallbackMouseUp(Form, X, Y, MouseButton, BrowserShiftState(Modifiers));
+    2: CallbackMouseMove(Form, X, Y, BrowserShiftState(Modifiers));
   end;
+  LCLWasmIdle;
+end;
+
+{ Kind: 0 key down, 1 key up, 2 character input. Key carries a Windows virtual
+  key code, CharCode a Unicode scalar for kind 2. }
+procedure LCLWasmKey(Kind, Key, CharCode, Modifiers: LongInt); cdecl;
+var
+  Form: TCDNonNativeForm;
+begin
+  Form := GetCurrentForm;
+  if Form = nil then Exit;
+  BrowserMods := Modifiers;
+  case Kind of
+    0: CallbackKeyDown(Form, Word(Key));
+    1: CallbackKeyUp(Form, Word(Key));
+    2: CallbackKeyChar(Form, Word(Key), BrowserUtf8(CharCode));
+  end;
+  LCLWasmIdle;
+end;
+
+procedure LCLWasmWheel(X, Y, Delta, Modifiers: LongInt); cdecl;
+var
+  Form: TCDNonNativeForm;
+begin
+  Form := GetCurrentForm;
+  if Form = nil then Exit;
+  BrowserMouse := Point(X, Y);
+  BrowserMods := Modifiers;
+  LCLSendMouseWheelMsg(Form.LCLForm, X, Y, Delta, BrowserShiftState(Modifiers));
   LCLWasmIdle;
 end;
 
