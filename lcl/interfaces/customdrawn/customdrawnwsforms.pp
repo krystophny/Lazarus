@@ -209,6 +209,9 @@ implementation
 {$ifdef CD_Android}
   {$include customdrawnwsforms_android.inc}
 {$endif}
+{$ifdef CD_Wasm}
+  {$include customdrawnwsforms_wasm.inc}
+{$endif}
 {$ifdef CD_Wayland}
   {$include customdrawnwsforms_wayland.inc}
 {$endif}

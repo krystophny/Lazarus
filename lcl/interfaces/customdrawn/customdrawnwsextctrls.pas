@@ -243,7 +243,7 @@ end;
 {$ifdef CD_X11}
   {$I customdrawntrayicon_x11.inc}
 {$endif}
-{$ifdef CD_Android}
+{$if defined(CD_Android) or defined(CD_Wasm)}
   {$I customdrawntrayicon_android.inc}
 {$endif}
 {$ifdef CD_Wayland}

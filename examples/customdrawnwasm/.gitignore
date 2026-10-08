@@ -1,0 +1,7 @@
+/build/
+/web/demo
+/web/demo.wasm
+/web/jobhost.js
+/web/host.bundle.js
+/node_modules/
+/web/source/job_browser.pp

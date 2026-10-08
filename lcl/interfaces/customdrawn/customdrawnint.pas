@@ -580,10 +580,18 @@ var
   eventResult: jint;
 {$endif}
 
+{$ifdef CD_Wasm}
+procedure LCLWasmRender; cdecl;
+procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
+procedure LCLWasmResize(Width, Height: LongInt); cdecl;
+procedure LCLWasmTimer(Handle: LongInt); cdecl;
+{$endif}
+
 implementation
 
 uses
   WsControls, lclintf,
+  {$ifdef CD_Wasm}CustomDrawnWasmDOM,{$endif}
   CustomDrawnWSFactory,
   CustomDrawnWSForms,
 {  Win32WSButtons,
@@ -630,9 +638,17 @@ begin
   inherited Destroy;
 end;
 
+{$ifdef CD_Wasm}
+  {$I customdrawnobject_wasm.inc}
+{$endif}
+
 {$I customdrawnobject.inc}
 
 {$I customdrawnwinapi.inc}
+{$ifdef CD_Wasm}
+  {$I customdrawnwinapi_wasm.inc}
+  {$I customdrawnlclintf_wasm.inc}
+{$endif}
 {$I customdrawnlclintf.inc}
 
 {$ifdef CD_Windows}
@@ -660,6 +676,14 @@ end;
   {$I customdrawnobject_wayland.inc}
   {$I customdrawnwinapi_wayland.inc}
   {$I customdrawnlclintf_wayland.inc}
+{$endif}
+
+{$ifdef CD_Wasm}
+exports
+  LCLWasmRender name 'lcl_render',
+  LCLWasmPointer name 'lcl_pointer',
+  LCLWasmResize name 'lcl_resize',
+  LCLWasmTimer name 'lcl_timer';
 {$endif}
 
 end.

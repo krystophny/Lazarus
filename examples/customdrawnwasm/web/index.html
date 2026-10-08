@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LCL browser experiment</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#1c2635;font:16px system-ui,sans-serif}main{max-width:800px;margin:36px auto;padding:0 20px}h1{font-size:28px;margin:8px 0}p{line-height:1.5}small{color:#526176}canvas{display:block;max-width:none;height:auto;border:1px solid #bcc7d4;background:white;touch-action:none}#status{font-size:14px;color:#345477}#status[data-state=error]{color:#a62121}a{color:#245eb0}.note{font-size:14px;color:#526176}
+#lcl-surface{position:relative;width:720px;height:480px}#lcl-dom{position:absolute;inset:0;pointer-events:none}#lcl-dom>*{pointer-events:auto;font-family:system-ui}#lcl-dom button{border:1px solid #a5b8ce;background:#fff;border-radius:5px;color:#203e69;cursor:pointer}#lcl-dom button:hover{background:#e5eefb}#lcl-dom label{display:flex;align-items:center;gap:10px}#lcl-dom input{width:20px;height:20px;accent-color:#245bb6}#lcl-dom button:focus-visible{outline:3px solid #3972c5;outline-offset:2px}.scroller{overflow:auto}</style>
+</head>
+<body><main>
+<small>LAZARUS · FIRST WASM BRANCH</small>
+<h1>A small LCL application, in your browser</h1>
+<p>Try the counter, toggle the filled shape, and click the drawing area to place a marker. The controls and event handlers run in Pascal.</p>
+<p id="status" data-state="loading" role="status">Loading the WebAssembly application…</p>
+<div class="scroller"><div id="lcl-surface"><canvas id="lcl" width="720" height="480" tabindex="0" aria-label="Experimental LCL application. Pointer drawing; use Tab, Enter and Space on the DOM controls."></canvas><div id="lcl-dom"></div></div></div>
+<p class="note">Experimental hybrid backend: real DOM buttons and checkbox through JOB, with LCL TCanvas drawing. Forms and event handlers are unchanged Pascal. Text editors, IME, dialogs, file access and accessibility of the drawing still need implementation and testing.</p>
+<p><a href="https://github.com/krystophny/Lazarus/tree/feature/customdrawn-wasm-first-app">Source branch</a> · <a href="./licenses.txt">Licenses</a></p>
+</main><script src="./jobhost.js"></script><script>rtl.run();</script><script type="module" src="./host.bundle.js"></script></body>
+</html>

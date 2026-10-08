@@ -105,8 +105,10 @@ begin
     debugln(['TTaskDialogProgressBar.SetRange: TDM_SET_PROGRESS_BAR_RANGE, FMin=',FMin,', FMax=',FMax,', MAKELPARAM=',MAKELPARAM(Word(FMin), Word(FMax)),': LResult=',PtrInt(Res)]);
     if (Res = 0) then
     begin
+      {$IF DECLARED(GetLastOSError)}
       Err := GetLastOSError;
       debugln(['Err=',Err,': ',SysErrorMessage(Err)]);
+      {$ENDIF}
     end
     else
     begin
@@ -146,8 +148,10 @@ begin
     debugln(['TTaskDialogProgressBar.SetState: LResult=',PtrInt(Res)]);  //Zero iindicates failure
     if (Res = 0) then
     begin
+      {$IF DECLARED(GetLastOSError)}
       Err := GetLastOSError;
       debugln(['Err=',Err,': ',SysErrorMessage(Err)]);
+      {$ENDIF}
     end;
   end;
 end;
@@ -188,8 +192,10 @@ begin
       debugln(['TTaskDialogProgressBar.Initialize: TDM_SET_PROGRESS_BAR_RANGE (FMin=,',FMin,', FMax=',FMax,'): LResult=',PtrInt(Res)]);
       if (Res = 0) then
       begin
+        {$IF DECLARED(GetLastOSError)}
         Err := GetLastOSError;
         debugln(['Err=',Err,': ',SysErrorMessage(Err)]);
+        {$ENDIF}
       end
       else
       begin
@@ -212,8 +218,10 @@ begin
     debugln(['TTaskDialogProgressBar.Initialize: TDM_SET_PROGRESS_BAR_STATE: LResult=',PtrInt(Res)]);  //Zero iindicates failure
     if (Res = 0) then
     begin
+      {$IF DECLARED(GetLastOSError)}
       Err := GetLastOSError;
       debugln(['Err=',Err,': ',SysErrorMessage(Err)]);
+      {$ENDIF}
     end;
 
   end;

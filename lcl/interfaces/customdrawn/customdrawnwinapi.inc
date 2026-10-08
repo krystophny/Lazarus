@@ -535,7 +535,9 @@ begin
   lFont.Size := Abs(LogFont.lfHeight);
   if lFont.Size = 0 then
     lFont.Size := 10;   { LCL convention: default UI font is 10 pt }
+  {$ifndef CD_UseNativeText}
   lFont.ftFont.SizeInPoints := lFont.Size;
+  {$endif}
 
 (*  // Some values at available on Qt documentation at a table
   // Others are guesses. The best would be to test different values for those
