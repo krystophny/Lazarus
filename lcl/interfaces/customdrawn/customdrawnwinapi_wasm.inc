@@ -99,7 +99,13 @@ end;
 
 function TCDWidgetSet.GetKeyState(nVirtKey: Integer): Smallint;
 begin
-  Result := 0; { Keyboard routing is outside this initial pointer-only slice. }
+  Result := 0;
+  case nVirtKey of
+    $10: if (BrowserMods and 1) <> 0 then Result := Smallint($8000);  { VK_SHIFT }
+    $11: if (BrowserMods and 2) <> 0 then Result := Smallint($8000);  { VK_CONTROL }
+    $12: if (BrowserMods and 4) <> 0 then Result := Smallint($8000);  { VK_MENU }
+    $01: if (BrowserMods and 8) <> 0 then Result := Smallint($8000);  { VK_LBUTTON }
+  end;
 end;
 
 function TCDWidgetSet.GetSystemMetrics(nIndex: Integer): Integer;
