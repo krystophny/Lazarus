@@ -6302,6 +6302,71 @@ end;
   Sizing is done according to the stretching mode currently set in the
   destination device context.
  ------------------------------------------------------------------------------}
+{ Copies a source rectangle honouring the monochrome mask (set bits are
+  transparent) and the source alpha channel. A source whose alpha is zero
+  throughout the rectangle counts as opaque. Returns False when neither mask
+  nor alpha applies, so the caller can make a plain copy. }
+function CDMaskedAlphaCopy(ADest, ASource: TLazCanvas; AMask: HBITMAP;
+  X, Y, XSrc, YSrc, XMask, YMask, Width, Height: Integer): Boolean;
+var
+  SrcImage, DestImage, MaskImage: TLazIntfImage;
+  UseAlpha: Boolean;
+  I, J, DestX, DestY: Integer;
+  Alpha, InvAlpha: Cardinal;
+  SrcColor, DestColor: TFPColor;
+begin
+  Result := False;
+  if not (ASource.Image is TLazIntfImage) or not (ADest.Image is TLazIntfImage) then Exit;
+  SrcImage := TLazIntfImage(ASource.Image);
+  DestImage := TLazIntfImage(ADest.Image);
+  MaskImage := nil;
+  if (AMask <> 0) and (TCDBitmap(AMask).Image <> nil) and
+    (TCDBitmap(AMask).Image.PixelData <> nil) then
+    MaskImage := TCDBitmap(AMask).Image;
+  UseAlpha := False;
+  if SrcImage.DataDescription.AlphaPrec > 0 then
+    for J := Max(0, YSrc) to Min(SrcImage.Height, YSrc + Height) - 1 do
+    begin
+      for I := Max(0, XSrc) to Min(SrcImage.Width, XSrc + Width) - 1 do
+        if SrcImage.Colors[I, J].Alpha <> alphaTransparent then
+        begin
+          UseAlpha := True;
+          Break;
+        end;
+      if UseAlpha then Break;
+    end;
+  if not UseAlpha and (MaskImage = nil) then Exit;
+  Result := True;
+  for J := 0 to Height - 1 do
+    for I := 0 to Width - 1 do
+    begin
+      if (XSrc + I < 0) or (YSrc + J < 0) or (XSrc + I >= SrcImage.Width)
+        or (YSrc + J >= SrcImage.Height) then Continue;
+      if (MaskImage <> nil) and (XMask + I >= 0) and (YMask + J >= 0)
+        and (XMask + I < MaskImage.Width) and (YMask + J < MaskImage.Height)
+        and (MaskImage.Colors[XMask + I, YMask + J].Red >= $8000) then Continue;
+      SrcColor := SrcImage.Colors[XSrc + I, YSrc + J];
+      Alpha := $FFFF;
+      if UseAlpha then Alpha := SrcColor.Alpha;
+      if Alpha = 0 then Continue;
+      if Alpha < $FFFF then
+      begin
+        // Background in image coordinates, as TLazCanvas.SetColor writes it.
+        DestX := X + I + ADest.WindowOrg.X;
+        DestY := Y + J + ADest.WindowOrg.Y;
+        if (DestX < 0) or (DestY < 0) or (DestX >= DestImage.Width)
+          or (DestY >= DestImage.Height) then Continue;
+        DestColor := DestImage.Colors[DestX, DestY];
+        InvAlpha := $FFFF - Alpha;
+        SrcColor.Red := (SrcColor.Red * Alpha + DestColor.Red * InvAlpha) div $FFFF;
+        SrcColor.Green := (SrcColor.Green * Alpha + DestColor.Green * InvAlpha) div $FFFF;
+        SrcColor.Blue := (SrcColor.Blue * Alpha + DestColor.Blue * InvAlpha) div $FFFF;
+      end;
+      SrcColor.Alpha := alphaOpaque;
+      ADest.Colors[X + I, Y + J] := SrcColor;
+    end;
+end;
+
 function TCDWidgetSet.StretchMaskBlt(DestDC: HDC; X, Y, Width, Height: Integer;
   SrcDC: HDC; XSrc, YSrc, SrcWidth, SrcHeight: Integer; Mask: HBITMAP;
   XMask, YMask: Integer; Rop: DWORD): Boolean;
@@ -6328,7 +6393,9 @@ begin
   // Optimization if no stretch is desired
   if (SrcWidth = Width) and (SrcHeight = Height) then
   begin
-    DstLazDC.CanvasCopyRect(SrcLazDC, X, Y, XSrc, YSrc, SrcWidth, SrcHeight);
+    if not CDMaskedAlphaCopy(DstLazDC, SrcLazDC, Mask, X, Y, XSrc, YSrc,
+      XMask, YMask, Width, Height) then
+      DstLazDC.CanvasCopyRect(SrcLazDC, X, Y, XSrc, YSrc, SrcWidth, SrcHeight);
     Exit;
   end;
 
