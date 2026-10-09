@@ -21,7 +21,8 @@ type
     FCount, FMarkerX, FMarkerY: Integer;
     FHasMarker: Boolean;
   end;
-var DemoForm: TDemoForm;
+var
+  DemoForm: TDemoForm;
 implementation
 {$R *.lfm}
 procedure TDemoForm.CounterButtonClick(Sender: TObject);
