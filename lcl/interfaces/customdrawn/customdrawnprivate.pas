@@ -372,6 +372,11 @@ begin
     BrowserMouseTarget := lTarget;
     if lTarget.HandleAllocated then
       lTarget.Perform(CM_MOUSEENTER, WParam(0), LParam(0));
+    {$ifdef CPUWASM32}
+    { Cursor changes already update immediately through SetCursor. Only a
+      new hover target needs inherited-cursor resolution; reuse this hit test. }
+    CDWidgetSet.UpdateBrowserCursor(lTarget);
+    {$endif}
   end;
   { No blanket invalidate here. Applications such as TpX already invalidate the
     union of the old and new cursor lines from MouseMove with a precise rect; a
