@@ -220,6 +220,23 @@ begin
   AWindowHandle.IsScrolling := False;
 end;
 
+{ True when the control sits inside a toolbar or control bar.
+  Native widgetsets keep keyboard focus on the client area when the user clicks
+  one of these bars; the browser backend must do the same, or every shortcut
+  (Escape, Ctrl+Z, arrows) is delivered to the bar instead of the document. }
+function InControlBar(AControl: TWinControl): Boolean;
+var
+  Parent: TWinControl;
+begin
+  Result := False;
+  Parent := AControl;
+  while (Parent <> nil) and not Result do
+  begin
+    Result := (Parent is TToolBar) or (Pos('ToolBar', Parent.Name) > 0);
+    Parent := Parent.Parent;
+  end;
+end;
+
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 var
   lTarget: TWinControl;
@@ -247,8 +264,15 @@ begin
   //DebugLn(Format('CallbackMouseDown lEventPos X=%d y=%d lTarget %s:%s',
   //  [lEventPos.X, lEventPos.y, lTarget.Name, lTarget.ClassName]));
   AWindowHandle.LastMouseDownControl := lTarget;
-  AWindowHandle.FocusedControl := lTarget;
-  AWindowHandle.FocusedIntfControl := nil;
+  { Native widgetsets do not give a click on a toolbar button focus: a control
+    with TabStop = False leaves the previously focused client control in charge.
+    Taking focus unconditionally here stranded keyboard focus on the tool button,
+    so Escape, Undo and every other shortcut stopped reaching the drawing area. }
+  if (lTarget <> nil) and not InControlBar(lTarget) then
+  begin
+    AWindowHandle.FocusedControl := lTarget;
+    AWindowHandle.FocusedIntfControl := nil;
+  end;
   lEventPos := FormPosToControlPos(lTarget, x, y);
 
   LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
