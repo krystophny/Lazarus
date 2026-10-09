@@ -179,6 +179,7 @@ begin
   Brush.Free;
   Pen.Free;
   Font.Free;
+  ClipRegion.Free;
   inherited Destroy;
 end;
 
@@ -303,6 +304,10 @@ end;
 procedure TLazCanvas.DoRectangleFill(const Bounds: TRect);
 var
   b : TRect;
+  Intf: TLazIntfImage;
+  Value: LongWord;
+  Row: PLongWord;
+  X, Y: Integer;
 begin
   b := Bounds;
   SortRect (b);
@@ -320,6 +325,51 @@ begin
   begin
     FillColor(Brush.FPColor, True);
     Exit;
+  end;
+
+  if Clipping and (ClipRegion <> nil) then
+  begin
+    with ClipRegion.GetBoundingRect do
+    begin
+      b.Left := Max(b.Left, Left - FWindowOrg.X);
+      b.Top := Max(b.Top, Top - FWindowOrg.Y);
+      b.Right := Min(b.Right, Right - FWindowOrg.X);
+      b.Bottom := Min(b.Bottom, Bottom - FWindowOrg.Y);
+    end;
+    if (b.Left > b.Right) or (b.Top > b.Bottom) then Exit;
+  end;
+
+  if (Brush.Style = bsSolid) and (Image is TLazIntfImage)
+    and (not Clipping or ((ClipRegion is TLazRegion)
+      and TLazRegion(ClipRegion).IsSimpleRectRegion)) then
+  begin
+    Intf := TLazIntfImage(Image);
+    with Intf.DataDescription do
+      if (Format = ricfRGBA) and (BitsPerPixel = 32) and (MaskBitsPerPixel = 0)
+        and (RedPrec = 8) and (GreenPrec = 8) and (BluePrec = 8)
+        and (AlphaPrec in [0, 8]) and (ByteOrder = riboLSBFirst)
+        and (LineOrder = riloTopToBottom) then
+      begin
+        Value := (LongWord(Brush.FPColor.Red shr 8) shl RedShift)
+          or (LongWord(Brush.FPColor.Green shr 8) shl GreenShift)
+          or (LongWord(Brush.FPColor.Blue shr 8) shl BlueShift);
+        if AlphaPrec = 8 then
+          Value := Value or (LongWord(Brush.FPColor.Alpha shr 8) shl AlphaShift);
+        Inc(b.Left, FWindowOrg.X);
+        Inc(b.Right, FWindowOrg.X);
+        Inc(b.Top, FWindowOrg.Y);
+        Inc(b.Bottom, FWindowOrg.Y);
+        b.Left := Max(0, b.Left);
+        b.Top := Max(0, b.Top);
+        b.Right := Min(Width - 1, b.Right);
+        b.Bottom := Min(Height - 1, b.Bottom);
+        for Y := b.Top to b.Bottom do
+        begin
+          Row := PLongWord(Intf.GetDataLineStart(Y));
+          for X := b.Left to b.Right do Row[X] := Value;
+        end;
+        Exit;
+      end;
   end;
 
   case Brush.style of
@@ -485,6 +535,10 @@ end;
 {$ENDIF}
 
 procedure TLazCanvas.DoLine(x1, y1, x2, y2: integer);
+var
+  SavedColor: TFPColor;
+  SavedStyle: TFPBrushStyle;
+  LineRect: TRect;
   procedure DrawOneLine (xx1,yy1, xx2,yy2:integer);
   begin
     if Clipping then
@@ -520,6 +574,23 @@ procedure TLazCanvas.DoLine(x1, y1, x2, y2: integer);
   end;
 
 begin
+  if (Pen.Style = psSolid) and (Pen.Width <= 1)
+    and ((x1 = x2) or (y1 = y2)) then
+  begin
+    SavedColor := Brush.FPColor;
+    SavedStyle := Brush.Style;
+    Brush.FPColor := Pen.FPColor;
+    Brush.Style := bsSolid;
+    LineRect := Rect(Min(x1, x2), Min(y1, y2), Max(x1, x2), Max(y1, y2));
+    {$ifndef HasTRectangleMode}
+    Inc(LineRect.Right);
+    Inc(LineRect.Bottom);
+    {$endif}
+    DoRectangleFill(LineRect);
+    Brush.FPColor := SavedColor;
+    Brush.Style := SavedStyle;
+    Exit;
+  end;
 { We can are not clip here because we clip in each drawn pixel
   or introduce a more complex algorithm to take into account lazregions
   if Clipping then
@@ -597,6 +668,18 @@ begin
   lState.BaseWindowOrg := BaseWindowOrg;
   lState.WindowOrg := WindowOrg;
   lState.Clipping := Clipping;
+  if ClipRegion is TLazRegion then
+  begin
+    if ClipRegion is TLazRegionWithChilds then
+    begin
+      lState.ClipRegion := TLazRegionWithChilds.Create;
+      TLazRegionWithChilds(lState.ClipRegion).Childs.Assign(TLazRegionWithChilds(ClipRegion).Childs);
+      TLazRegionWithChilds(lState.ClipRegion).Parent := TLazRegionWithChilds(ClipRegion).Parent;
+      TLazRegionWithChilds(lState.ClipRegion).UserData := TLazRegionWithChilds(ClipRegion).UserData;
+    end
+    else lState.ClipRegion := TLazRegion.Create;
+    TLazRegion(lState.ClipRegion).Assign(TLazRegion(ClipRegion));
+  end;
 
   Result := GraphicStateList.Add(lState);
 end;
@@ -617,6 +700,8 @@ begin
   AssignFontData(lState.Font);
   BaseWindowOrg := lState.BaseWindowOrg;
   WindowOrg := lState.WindowOrg;
+  ClipRegion := lState.ClipRegion;
+  lState.ClipRegion := nil;
   Clipping := lState.Clipping;
 
   lState.Free;
@@ -870,7 +955,7 @@ begin
 
   {$ifdef lazcanvas_new_fast_copy}
   // If the formats match, make a fast copy of the data itself, without pixel conversion
-  if (ASource is TLazCanvas) and
+  if not Clipping and (ASource is TLazCanvas) and
      (Image is TLazIntfImage) and (ALazSource.Image is TLazIntfImage) and
      (ImageFormat in [clfRGB24, clfRGB24UpsideDown, clfBGR24, clfBGRA32, clfRGBA32, clfARGB32]) and
      (ImageFormat = ALazSource.ImageFormat) then
