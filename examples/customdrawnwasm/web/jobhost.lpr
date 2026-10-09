@@ -1,4 +1,5 @@
-{ SPDX-License-Identifier: MIT }
+{ SPDX-License-Identifier: MIT
+  Exposes the Pas2JS object bridge to the browser host. }
 program jobhost;
 {$mode objfpc}
 uses JS, WebAssembly, WasiEnv, JOB_Browser;

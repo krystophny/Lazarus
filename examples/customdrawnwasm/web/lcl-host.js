@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Browser rendering, input and WASI services for the CustomDrawn backend.
 import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory } from '@bjorn3/browser_wasi_shim';
 
 export async function startLCL({moduleURL = './demo.wasm', argv = ['lcl-demo'], createImports} = {}) {
