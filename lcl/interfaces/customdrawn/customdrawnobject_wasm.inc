@@ -4,6 +4,11 @@
 procedure BrowserPresent(Data: Pointer; Width, Height: LongInt); external 'lcl' name 'present';
 procedure BrowserInvalidate; external 'lcl' name 'invalidate';
 procedure BrowserTitle(Text: PChar; Count: LongInt); external 'lcl' name 'title';
+{ Non-blocking report for the host: a browser cannot run a modal native dialog,
+  but it can show the text. Used by MessageBox so an application that reports a
+  disabled feature (or any error) is heard instead of crashing. }
+procedure BrowserMessage(Text, Caption: PChar; CountText, CountCaption: LongInt;
+  Flags: LongInt); external 'lcl' name 'message';
 function BrowserTimer(Handle, Interval: LongInt): LongInt; external 'lcl' name 'timer';
 procedure BrowserClearTimer(Handle: LongInt); external 'lcl' name 'clear_timer';
 function BrowserMeasure(Text: PChar; Count, FontSize: LongInt): LongInt; external 'lcl' name 'measure';
