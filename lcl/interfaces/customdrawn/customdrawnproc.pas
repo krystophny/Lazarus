@@ -74,6 +74,9 @@ type
     WinControl: TWinControl;
     CDControl: TCDControl;
     CDControlInjected: Boolean;
+    {$ifdef CD_Wasm}BrowserDOM, BrowserNeedsPaint: Boolean;
+    destructor Destroy; override;
+    {$endif}
     procedure UpdateImageAndCanvas; override;
     function IsControlBackgroundVisible: Boolean; override;
     function GetWinControl: TWinControl; override;
@@ -189,6 +192,7 @@ function GetForm(AIndex: Integer): TCDNonNativeForm;
 function GetFormCount(): Integer;
 function AddNewForm(AForm: TCustomForm): TCDNonNativeForm;
 procedure AddFormWithCDHandle(AHandle: TCDForm);
+{$ifdef CD_Wasm}procedure RemoveBrowserForm(AForm: TCDNonNativeForm);{$endif}
 function FindFormWithNativeHandle(AHandle: HWND): TCDForm;
 procedure ShowForm(ACDForm: TCDNonNativeForm);
 procedure HideForm(ACDForm: TCDNonNativeForm);
@@ -202,15 +206,15 @@ procedure UpdateControlLazImageAndCanvas(var AImage: TLazIntfImage;
   var ACanvas: TLazCanvas; AWidth, AHeight: Integer; AFormat: TLazCanvasImageFormat;
   AData: Pointer = nil; AForceUpdate: Boolean = False;
   AFreeImageOnUpdate: Boolean = True; ADataOwner: Boolean = True);
-procedure DrawFormBackground(var AImage: TLazIntfImage; var ACanvas: TLazCanvas; AForm: TCustomForm);
+procedure DrawFormBackground(var AImage: TLazIntfImage; var ACanvas: TLazCanvas; AForm: TCustomForm; APaintRect: PRect = nil);
 procedure RenderChildWinControls(var AImage: TLazIntfImage;
-  var ACanvas: TLazCanvas; ACDControlsList: TFPList; ACDForm: TCDForm);
+  var ACanvas: TLazCanvas; ACDControlsList: TFPList; ACDForm: TCDForm; APaintRect: PRect = nil);
 function RenderWinControl(var AImage: TLazIntfImage;
-  var ACanvas: TLazCanvas; ACDWinControl: TCDWinControl; ACDForm: TCDForm): Boolean;
+  var ACanvas: TLazCanvas; ACDWinControl: TCDWinControl; ACDForm: TCDForm; APaintRect: PRect = nil): Boolean;
 procedure RenderWinControlAndChildren(var AImage: TLazIntfImage;
-  var ACanvas: TLazCanvas; ACDWinControl: TCDWinControl; ACDForm: TCDForm);
+  var ACanvas: TLazCanvas; ACDWinControl: TCDWinControl; ACDForm: TCDForm; APaintRect: PRect = nil);
 procedure RenderForm(var AImage: TLazIntfImage;
-  var ACanvas: TLazCanvas; AForm: TCustomForm);
+  var ACanvas: TLazCanvas; AForm: TCustomForm; APaintRect: PRect = nil);
 function FindControlWhichReceivedEvent(AForm: TCustomForm;
   AControlsList: TFPList; AX, AY: Integer): TWinControl;
 function FindControlPositionRelativeToTheForm(ALCLControl: TWinControl; AConsiderScrolling: Boolean = False): TPoint;
@@ -244,7 +248,7 @@ procedure FontsScanDir(APath: string; var AFontPaths: TStringList; var AFontList
 
 implementation
 
-uses customdrawnint;
+uses customdrawnint {$ifdef CD_Wasm}, customdrawnprivate{$endif};
 
 var
   // List with the Z-order of non-native forms, index=0 is the bottom-most form
@@ -316,6 +320,21 @@ begin
   InitNonNativeForms();
   NonNativeForms.Insert(0, AHandle);
 end;
+
+{$ifdef CD_Wasm}
+procedure RemoveBrowserForm(AForm: TCDNonNativeForm);
+begin
+  if AForm = nil then Exit;
+  ForgetBrowserControl(AForm.LCLForm);
+  if CDWidgetSet.FocusedControl = AForm.LCLForm then
+    CDWidgetSet.FocusedControl := nil;
+  NonNativeForms.Remove(AForm);
+  if lCurrentForm = AForm then lCurrentForm := FindTopMostVisibleForm;
+  AForm.Canvas.Free;
+  AForm.Image.Free;
+  AForm.Free;
+end;
+{$endif}
 
 function FindFormWithNativeHandle(AHandle: HWND): TCDForm;
 var
@@ -478,7 +497,7 @@ begin
   {$ENDIF}
 end;
 
-procedure DrawFormBackground(var AImage: TLazIntfImage; var ACanvas: TLazCanvas; AForm: TCustomForm);
+procedure DrawFormBackground(var AImage: TLazIntfImage; var ACanvas: TLazCanvas; AForm: TCustomForm; APaintRect: PRect);
 var
   lColor: TColor;
 begin
@@ -491,14 +510,15 @@ begin
     lColor := ColorToRGB(clForm);
   ACanvas.Brush.FPColor := TColorToFPColor(lColor);
   ACanvas.Pen.FPColor := TColorToFPColor(lColor);
-  ACanvas.Rectangle(0, 0, AImage.Width, AImage.Height);
+  if APaintRect = nil then ACanvas.Rectangle(0, 0, AImage.Width, AImage.Height)
+  else ACanvas.Rectangle(APaintRect^);
   ACanvas.RestoreState(-1);
 end;
 
 // This does not render the win control itself, only it's children
 // The WinControls themselves will render child TControls not descending from TWinControl
 procedure RenderChildWinControls(var AImage: TLazIntfImage;
-  var ACanvas: TLazCanvas; ACDControlsList: TFPList; ACDForm: TCDForm);
+  var ACanvas: TLazCanvas; ACDControlsList: TFPList; ACDForm: TCDForm; APaintRect: PRect);
 var
   i, lChildrenCount: Integer;
   lCDWinControl: TCDWinControl;
@@ -517,14 +537,14 @@ begin
 
     lCDWinControl := TCDWinControl(ACDControlsList.Items[i]);
 
-    RenderWinControlAndChildren(AImage, ACanvas, lCDWinControl, ACDForm);
+    RenderWinControlAndChildren(AImage, ACanvas, lCDWinControl, ACDForm, APaintRect);
   end;
 end;
 
 // Renders a WinControl, but not it's children
 // Returns if the control is visible and therefore if its children should be rendered
 function RenderWinControl(var AImage: TLazIntfImage; var ACanvas: TLazCanvas;
-  ACDWinControl: TCDWinControl; ACDForm: TCDForm): Boolean;
+  ACDWinControl: TCDWinControl; ACDForm: TCDForm; APaintRect: PRect): Boolean;
 var
   lWinControl, lParentControl: TWinControl;
   struct : TPaintStruct;
@@ -534,9 +554,13 @@ var
   lControlStateEx: TCDControlStateEx;
   lDrawControl: Boolean;
   lRegion:TLazRegionWithChilds;
+  PaintRect, ControlRect: TRect;
 begin
   Result := False;
 
+  {$ifdef CD_Wasm}
+  if ACDWinControl.BrowserDOM then Exit;
+  {$endif}
   lWinControl := ACDWinControl.WinControl;
 
   {$ifdef VerboseCDWinControl}
@@ -557,14 +581,17 @@ begin
   // Disable the drawing itself, but keep the window org and region operations
   // or else clicking and other things are broken
   lDrawControl := ACDWinControl.IsControlBackgroundVisible();
+  lBaseWindowOrg := FindControlPositionRelativeToTheForm(lWinControl);
+  ControlRect := Bounds(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY,
+    lWinControl.Width, lWinControl.Height);
+  PaintRect := ControlRect;
+  if (APaintRect <> nil) and not IntersectRect(PaintRect, ControlRect, APaintRect^) then
+    Exit;
 
   // Save the Canvas state
   ACanvas.SaveState;
   ACanvas.ResetCanvasState;
 
-  // lBaseWindowOrg makes debugging easier
-  // Iterate to find the appropriate BaseWindowOrg relative to the parent control
-  lBaseWindowOrg := FindControlPositionRelativeToTheForm(lWinControl);
   ACanvas.BaseWindowOrg := Point(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY);
   ACanvas.WindowOrg := Point(0, 0);
 
@@ -573,16 +600,32 @@ begin
   ACDWinControl.Region.Rect := Bounds(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY,
     lWinControl.Width, lWinControl.Height);
   lRegion := TLazRegionWithChilds.Create;
-  lRegion.Assign(ACDWinControl.Region);
+  if APaintRect <> nil then
+    lRegion.SetAsSimpleRectRegion(Rect(PaintRect.Left, PaintRect.Top,
+      PaintRect.Right-1, PaintRect.Bottom-1))
+  else
+    lRegion.Assign(ACDWinControl.Region);
   ACanvas.ClipRegion := lRegion;
 
   lControlCanvas := ACanvas;
 
-  if (ACDWinControl.InvalidateCount > 0) and lDrawControl then
+  if ((ACDWinControl.InvalidateCount > 0)
+    {$ifdef CD_Wasm}or ACDWinControl.BrowserNeedsPaint{$else}or (APaintRect <> nil){$endif})
+    and lDrawControl then
   begin
     ACDWinControl.UpdateImageAndCanvas();
     lControlCanvas := ACDWinControl.ControlCanvas;
     ACDWinControl.InvalidateCount := 0;
+    if APaintRect <> nil then
+    begin
+      lControlCanvas.SaveState;
+      OffsetRect(PaintRect, -ControlRect.Left, -ControlRect.Top);
+      lRegion := TLazRegionWithChilds.Create;
+      lRegion.SetAsSimpleRectRegion(Rect(PaintRect.Left, PaintRect.Top,
+        PaintRect.Right-1, PaintRect.Bottom-1));
+      lControlCanvas.ClipRegion := lRegion;
+      lControlCanvas.Clipping := True;
+    end;
 
     // Special drawing for some native controls
     if (lWinControl is TCustomPanel) or (lWinControl is TTabSheet)
@@ -618,8 +661,10 @@ begin
     {$endif}
     FillChar(struct, SizeOf(TPaintStruct), 0);
     struct.hdc := HDC(lControlCanvas);
+    if APaintRect <> nil then struct.rcPaint := PaintRect;
     LCLSendEraseBackgroundMsg(lWinControl, struct.hdc);
     LCLSendPaintMsg(lWinControl, struct.hdc, @struct);
+    if APaintRect <> nil then lControlCanvas.RestoreState(-1);
     {$ifdef VerboseCDWinControl}
     DebugLn('[RenderWinControl] after LCLSendPaintMsg');
     {$endif}
@@ -638,23 +683,24 @@ end;
 
 // Render a WinControl and all it's children
 procedure RenderWinControlAndChildren(var AImage: TLazIntfImage;
-  var ACanvas: TLazCanvas; ACDWinControl: TCDWinControl; ACDForm: TCDForm);
+  var ACanvas: TLazCanvas; ACDWinControl: TCDWinControl; ACDForm: TCDForm; APaintRect: PRect);
 begin
-  if not RenderWinControl(AImage, ACanvas, ACDWinControl, ACDForm) then Exit;
+  if not RenderWinControl(AImage, ACanvas, ACDWinControl, ACDForm, APaintRect) then Exit;
 
   // Now Draw all sub-controls
   if ACDWinControl.Children <> nil then
-    RenderChildWinControls(AImage, ACanvas, ACDWinControl.Children, ACDForm);
+    RenderChildWinControls(AImage, ACanvas, ACDWinControl.Children, ACDForm, APaintRect);
 end;
 
 // Draws a form and all of its child controls
 procedure RenderForm(var AImage: TLazIntfImage; var ACanvas: TLazCanvas;
-  AForm: TCustomForm);
+  AForm: TCustomForm; APaintRect: PRect);
 var
   struct : TPaintStruct;
   lWindowHandle: TCDForm;
   lFormCanvas: TLazCanvas;
   lDrawControl: Boolean;
+  PaintRegion: TLazRegion;
 begin
   lWindowHandle := TCDForm(AForm.Handle);
 
@@ -670,10 +716,10 @@ begin
   begin
     if not CDWidgetset.DisableFormBackgroundDrawingProc(AForm) then
       if lDrawControl then
-        DrawFormBackground(AImage, ACanvas, AForm);
+        DrawFormBackground(AImage, ACanvas, AForm, APaintRect);
   end
   else if lDrawControl then
-    DrawFormBackground(AImage, ACanvas, AForm);
+    DrawFormBackground(AImage, ACanvas, AForm, APaintRect);
 
   // Consider the form scrolling
   // ToDo: Figure out why this "div 2" factor is necessary for drawing non-windows controls and remove this factor
@@ -692,14 +738,25 @@ begin
     {$ENDIF}
     FillChar(struct, SizeOf(TPaintStruct), 0);
     struct.hdc := HDC(lFormCanvas);
+    if APaintRect <> nil then
+    begin
+      lFormCanvas.SaveState;
+      PaintRegion := TLazRegion.Create;
+      PaintRegion.SetAsSimpleRectRegion(Rect(APaintRect^.Left, APaintRect^.Top,
+        APaintRect^.Right-1, APaintRect^.Bottom-1));
+      lFormCanvas.ClipRegion := PaintRegion;
+      lFormCanvas.Clipping := True;
+      struct.rcPaint := APaintRect^;
+    end;
     LCLSendPaintMsg(AForm, struct.hdc, @struct);
+    if APaintRect <> nil then lFormCanvas.RestoreState(-1);
     {$IFDEF VerboseCDForms}
       DebugLn('[RenderForm] OnPaint event ended');
     {$ENDIF}
   end;
 
   // Now paint all child win controls
-  RenderChildWinControls(AImage, ACanvas, GetCDWinControlList(AForm), lWindowHandle);
+  RenderChildWinControls(AImage, ACanvas, GetCDWinControlList(AForm), lWindowHandle, APaintRect);
 end;
 
 function FindControlWhichReceivedEvent(AForm: TCustomForm;
@@ -1380,6 +1437,40 @@ begin
   Result := TCDScrollBars.Create(WC);
   Base.Props[CDScrollBarsKey] := Result;
 end;
+
+{$ifdef CD_Wasm}
+destructor TCDWinControl.Destroy;
+var
+  Form: TCustomForm;
+  ParentHandle: TCDWinControl;
+  I: Integer;
+  FormHandle: TCDForm;
+begin
+  ForgetBrowserControl(WinControl);
+  if (CDWidgetSet.FocusedControl = WinControl) then CDWidgetSet.FocusedControl := nil;
+  if (CDWidgetSet.FocusedIntfControl = WinControl)
+    or (CDWidgetSet.FocusedIntfControl = CDControl) then CDWidgetSet.FocusedIntfControl := nil;
+  for I := 0 to GetFormCount-1 do
+  begin
+    FormHandle := GetForm(I);
+    if FormHandle.LastMouseDownControl = WinControl then FormHandle.LastMouseDownControl := nil;
+    if FormHandle.FocusedControl = WinControl then FormHandle.FocusedControl := nil;
+    if (FormHandle.FocusedIntfControl = WinControl)
+      or (FormHandle.FocusedIntfControl = CDControl) then FormHandle.FocusedIntfControl := nil;
+  end;
+  Form := GetParentForm(WinControl);
+  if (WinControl.Parent is TCustomForm) and (Form <> nil) and Form.HandleAllocated then
+    GetCDWinControlList(Form).Remove(Self)
+  else if (WinControl.Parent <> nil) and WinControl.Parent.HandleAllocated then
+  begin
+    ParentHandle := TCDWinControl(WinControl.Parent.Handle);
+    ParentHandle.Region.Childs.Remove(Region);
+    if ParentHandle.Children <> nil then ParentHandle.Children.Remove(Self);
+  end;
+  Region.Free;
+  inherited Destroy;
+end;
+{$endif}
 
 destructor TCDBaseControl.Destroy;
 begin

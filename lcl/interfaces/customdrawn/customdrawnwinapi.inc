@@ -189,6 +189,13 @@ begin
   Count := 0;
   List := nil;
 
+  {$ifdef CD_Wasm}
+  Count := Length(BrowserClipboardFormats[ClipboardType]);
+  GetMem(List, Count * SizeOf(TClipboardFormat));
+  for i := 0 to Count-1 do List[i] := BrowserClipboardFormats[ClipboardType][i];
+  Result := True;
+  Exit;
+  {$endif}
   Count := FClipBoardFormats.Count;
   GetMem(List, Count * SizeOf(TClipboardFormat));
 
@@ -532,10 +539,21 @@ begin
     SizeInPoints stays 0 and the FreeType font measures every glyph as
     ~2 px -- breaking AutoSize, GetTextMetrics, and anything else that
     asks for text dimensions before a paint cycle has run. }
+  {$ifdef CD_Wasm}
+  if LongFontName <> '' then lFont.Name := LongFontName
+  else lFont.Name := StrPas(LogFont.lfFaceName);
+  lFont.Bold := LogFont.lfWeight >= FW_BOLD;
+  lFont.Italic := LogFont.lfItalic <> 0;
+  lFont.Underline := LogFont.lfUnderline <> 0;
+  lFont.StrikeThrough := LogFont.lfStrikeOut <> 0;
+  lFont.Angle := LogFont.lfEscapement;
+  {$endif}
   lFont.Size := Abs(LogFont.lfHeight);
   if lFont.Size = 0 then
     lFont.Size := 10;   { LCL convention: default UI font is 10 pt }
+  {$ifndef CD_UseNativeText}
   lFont.ftFont.SizeInPoints := lFont.Size;
+  {$endif}
 
 (*  // Some values at available on Qt documentation at a table
   // Others are guesses. The best would be to test different values for those
@@ -4613,7 +4631,11 @@ begin
     // conversion of coordinates to window coordinates. Better invalidate everything
     // then too few. And anyway on each draw we send everything.
     // This fixes changing the selection in TCustomGrid
+    {$ifdef CD_Wasm}
+    Result := BackendInvalidateRect(aHandle, Rect, BErase);
+    {$else}
     Result := BackendInvalidateRect(lControl.Handle, nil, BErase);
+    {$endif}
   end
   // Invalidate on a form
   else
@@ -5542,6 +5564,10 @@ begin
     //Result := BackendSetFocus(hWnd);
 
     if lHandle.WinControl = nil then Exit;
+    {$ifdef CD_Wasm}
+    if lHandle.BrowserDOM then CDSetFocusToControl(lHandle.WinControl, nil)
+    else
+    {$endif}
     CDSetFocusToControl(lHandle.WinControl, lHandle.CDControl);
 
     {$ifdef VerboseCDFocus}
@@ -5694,6 +5720,13 @@ begin
   CDForm := TCDForm(AWindowHandle);
   LCLForm := CDForm.LCLForm;
   if LCLForm = nil then Exit;
+
+  {$ifdef CD_Wasm}
+  { The browser host renders the form's menu as accessible HTML. Creating
+    the fallback toolbar here would draw and reserve a second menu row. }
+  BrowserMenusDirty := True;
+  Exit(True);
+  {$endif}
 
   MenuBar := TToolBar(CDForm.Props[CDMainMenuBarProp]);
 
