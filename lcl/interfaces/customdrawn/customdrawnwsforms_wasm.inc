@@ -1,3 +1,5 @@
+{%MainUnit customdrawnwsforms.pp}
+
 { Browser platform backend for the LCL CustomDrawn interface.
   See COPYING.modifiedLGPL.txt for license and linking exception. }
 
