@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory } from '@bjorn3/browser_wasi_shim';
 
-export async function startLCL({moduleURL = './demo.wasm', argv = ['lcl-demo']} = {}) {
+export async function startLCL({moduleURL = './demo.wasm', argv = ['lcl-demo'], createImports} = {}) {
 const canvas = document.querySelector('#lcl');
 const context = canvas.getContext('2d', {alpha: false, willReadFrequently: true});
 const status = document.querySelector('#status');
@@ -534,7 +534,14 @@ async function start() {
   const module = await WebAssembly.compileStreaming(response);
   const missing = WebAssembly.Module.imports(module).filter(i => i.module === 'wasi_snapshot_preview1' && !(i.name in wasiImports));
   if (missing.length) throw new Error(`Missing WASI services: ${missing.map(i=>i.name).join(', ')}`);
-  instance = await WebAssembly.instantiate(module, {wasi_snapshot_preview1: wasiImports, job: jobHost.imports, lcl: imports});
+  const applicationImports = createImports?.({
+    memory: () => instance.exports.memory,
+    call: (name, ...args) => {
+      if (ready) guarded(async () => { await api[name](...args); wakeMessage(); });
+    }
+  }) || {};
+  instance = await WebAssembly.instantiate(module, {...applicationImports,
+    wasi_snapshot_preview1: wasiImports, job: jobHost.imports, lcl: imports});
   jobHost.connect(instance);
   for (const [name, value] of Object.entries(instance.exports)) {
     if (typeof value === 'function') api[name] = WebAssembly.promising(value);
