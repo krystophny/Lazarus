@@ -4,6 +4,8 @@
 
 { TCDWSCustomForm }
 
+procedure BrowserActiveForm(Form: PtrUInt); external 'lcl' name 'active_form';
+
 class function TCDWSCustomForm.DoCreateHandle(const AWinControl: TWinControl;
   const AParams: TCreateParams): TLCLHandle;
 begin
@@ -76,6 +78,7 @@ var
 begin
   Form := TCDNonNativeForm(AWinControl.Handle);
   if AWinControl.Visible then ShowForm(Form) else HideForm(Form);
+  BrowserActiveForm(PtrUInt(GetCurrentForm));
 end;
 
 class function TCDWSCustomForm.GetText(const AWinControl: TWinControl; var AText: String): Boolean;
