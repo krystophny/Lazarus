@@ -199,7 +199,8 @@ function showDialog(options) {
     choices.forEach((choice, index) => {
       const id = typeof choice === 'object' ? choice.id : choice;
       const button = document.createElement('button');
-      button.textContent = choice.caption || buttonNames[id] || String(id);
+      button.textContent = (choice.caption || buttonNames[id] || String(id))
+        .replace(/&&/g, '\u0000').replace(/&/g, '').replace(/\u0000/g, '&');
       button.type = 'button';
       button.addEventListener('click', () => finish(id));
       if (index === (options.default || 0)) button.autofocus = true;
