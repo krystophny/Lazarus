@@ -17,8 +17,11 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    procedure ComplexClipFill;
     procedure RectClipState;
     procedure ComplexClipState;
+    procedure CopyPreservesPadding;
+    procedure CopyAliasedPixels;
   end;
 
 implementation
@@ -38,6 +41,20 @@ procedure TLazCanvasTest.TearDown;
 begin
   FCanvas.Free;
   FImage.Free;
+end;
+
+procedure TLazCanvasTest.ComplexClipFill;
+var
+  Region: TLazRegion;
+begin
+  Region := TLazRegion.Create;
+  Region.AddRectangle(Rect(4, 4, 6, 6));
+  FCanvas.ClipRegion := Region;
+  FCanvas.Clipping := True;
+  FCanvas.Brush.FPColor := colRed;
+  FCanvas.FillRect(0, 0, 8, 8);
+  AssertEquals('inside complex clip', $FFFF, FImage.Colors[5, 5].Red);
+  AssertEquals('outside complex clip', 0, FImage.Colors[1, 1].Red);
 end;
 
 procedure TLazCanvasTest.RectClipState;
@@ -82,6 +99,42 @@ begin
   AssertTrue('ellipse snapshot', Region.IsPointInRegion(5, 2));
   AssertTrue('polygon snapshot', Region.IsPointInRegion(2, 6));
   AssertFalse('outside snapshot', Region.IsPointInRegion(7, 7));
+end;
+
+procedure TLazCanvasTest.CopyPreservesPadding;
+var
+  Desc: TRawImageDescription;
+  Source: TLazIntfImage;
+  Canvas: TLazCanvas;
+begin
+  Desc := FImage.DataDescription;
+  Desc.AlphaPrec := 0;
+  Desc.Depth := 24;
+  FImage.DataDescription := Desc;
+  FillByte(FImage.PixelData^, Desc.BytesPerLine * Desc.Height, $AB);
+  Source := TLazIntfImage.Create(0, 0);
+  Source.DataDescription := Desc;
+  Canvas := TLazCanvas.Create(Source);
+  try
+    Source.Colors[0, 0] := colRed;
+    FCanvas.CanvasCopyRect(Canvas, 0, 0, 0, 0, 1, 1);
+    AssertEquals('copied channel', $FFFF, FImage.Colors[0, 0].Red);
+    AssertEquals('destination padding', $AB, FImage.PixelData[0]);
+  finally
+    Canvas.Free;
+    Source.Free;
+  end;
+end;
+
+procedure TLazCanvasTest.CopyAliasedPixels;
+var
+  X: Integer;
+begin
+  FImage.Colors[0, 0] := colRed;
+  FImage.Colors[1, 0] := colBlue;
+  FCanvas.CanvasCopyRect(FCanvas, 1, 0, 0, 0, 3, 1);
+  for X := 1 to 3 do
+    AssertEquals('pixel copy order', $FFFF, FImage.Colors[X, 0].Red);
 end;
 
 initialization
