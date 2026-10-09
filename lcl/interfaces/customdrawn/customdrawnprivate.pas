@@ -240,15 +240,19 @@ begin
   if (BrowserMouseTarget = nil) or not BrowserMouseTarget.HandleAllocated then Exit;
   BrowserMouseTarget.Perform(CM_MOUSELEAVE, WParam(0), LParam(0));
   if BrowserMouseTarget is TCustomControl then
-    LCLIntf.InvalidateRect(HWND(BrowserMouseTarget), nil, False);
+    LCLIntf.InvalidateRect(BrowserMouseTarget.Handle, nil, False);
   BrowserMouseTarget := nil;
 end;
 
 procedure CallbackMouseLeave(AWindowHandle: TCDForm);
 begin
   BrowserFireMouseLeave;
+  { HWND() of the CD form, as in the scrolling path above. HWND(LCLForm) is a
+    TCustomForm object pointer, and BrowserControl would cast it to
+    TCDBaseControl - a virtual call on the wrong vtable, which traps the wasm
+    instance with "function signature mismatch" and kills all later input. }
   if AWindowHandle <> nil then
-    LCLIntf.InvalidateRect(HWND(AWindowHandle.LCLForm), nil, False);
+    LCLIntf.InvalidateRect(HWND(AWindowHandle), nil, False);
 end;
 
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
@@ -353,8 +357,10 @@ begin
     if lTarget.HandleAllocated then
       lTarget.Perform(CM_MOUSEENTER, WParam(0), LParam(0));
   end;
-  if lTarget is TCustomControl then
-    LCLIntf.InvalidateRect(HWND(lTarget), nil, False);
+  { No blanket invalidate here. Applications such as TpX already invalidate the
+    union of the old and new cursor lines from MouseMove with a precise rect; a
+    nil rect here would turn every pointer move into a full-surface recompose and
+    upload (measured 43% of a core instead of 2%). }
 
   // If this is a interface control, send the message to the main LCL control too
   if IsIntfControl(lTarget) then
