@@ -683,6 +683,7 @@ end;
 exports
   LCLWasmRender name 'lcl_render',
   LCLWasmPointer name 'lcl_pointer',
+  LCLWasmLeave name 'lcl_leave',
   LCLWasmResize name 'lcl_resize',
   LCLWasmKey name 'lcl_key',
   LCLWasmWheel name 'lcl_wheel',
