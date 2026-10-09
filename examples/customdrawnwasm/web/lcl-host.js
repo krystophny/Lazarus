@@ -405,11 +405,16 @@ function flushMove(force = false) {
   pendingMove = null;
   pointer(2, ...move);
 }
-for (const [name, kind] of [['pointerdown', 0], ['pointerup', 1], ['pointermove', 2]]) {
+for (const [name, kind] of [['pointerdown', 0], ['mousedown', 0], ['pointerup', 1], ['pointermove', 2]]) {
   canvas.addEventListener(name, event => {
     if (!ready) return;
+    if (name === 'pointerdown') {
+      canvas.focus({preventScroll: true}); canvas.setPointerCapture(event.pointerId);
+      // PointerEvent.detail is zero. Let the browser's following mousedown
+      // supply its native click count, without also sending a normal down.
+      if (event.pointerType === 'mouse') return;
+    }
     event.preventDefault();
-    if (kind === 0) { canvas.focus({preventScroll: true}); canvas.setPointerCapture(event.pointerId); }
     const bounds = canvas.getBoundingClientRect();
     const x = Math.round((event.clientX-bounds.left)*canvas.width/bounds.width);
     const y = Math.round((event.clientY-bounds.top)*canvas.height/bounds.height);
@@ -420,7 +425,8 @@ for (const [name, kind] of [['pointerdown', 0], ['pointerup', 1], ['pointermove'
       return;
     }
     flushMove(true);
-    pointer(kind, x, y, event.button, modifiers);
+    const clickKind = name === 'mousedown' && event.detail > 1 ? Math.min(event.detail, 4)+1 : kind;
+    pointer(clickKind, x, y, event.button, modifiers);
     if (kind === 1 && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   });
 }

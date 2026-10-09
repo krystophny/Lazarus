@@ -163,7 +163,7 @@ type
 // These are default message handlers which backends might use to simplify their code
 // They convert a message sent to the form into a message to the correct sub-control
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
-procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
+procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 procedure CallbackMouseMove(AWindowHandle: TCDForm; x, y: Integer; ShiftState: TShiftState = []);
 procedure CallbackMouseLeave(AWindowHandle: TCDForm);
 procedure CallbackKeyDown(AWindowHandle: TCDForm; AKey: Word);
@@ -265,7 +265,7 @@ begin
     LCLIntf.InvalidateRect(HWND(AWindowHandle), nil, False);
 end;
 
-procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
+procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 var
   lTarget: TWinControl;
   lIntfTarget: TWinControl = nil;
@@ -303,7 +303,10 @@ begin
   end;
   lEventPos := FormPosToControlPos(lTarget, x, y);
 
-  LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
+  if ClickCount > 1 then
+    LCLSendMouseMultiClickMsg(lTarget, lEventPos.x, lEventPos.y, Button, ClickCount, ShiftState)
+  else
+    LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
 
   // If this is a interface control, send the message to the main LCL control too
   if IsIntfControl(lTarget) then
@@ -312,7 +315,10 @@ begin
     AWindowHandle.FocusedIntfControl := lTarget;
     lTarget := lTarget.Parent;
 
-    LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
+    if ClickCount > 1 then
+      LCLSendMouseMultiClickMsg(lTarget, lEventPos.x, lEventPos.y, Button, ClickCount, ShiftState)
+    else
+      LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
   end;
 
   { Cancel any in-flight tooltip hint -- LM_BUTTONDOWN goes through

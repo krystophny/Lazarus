@@ -243,6 +243,7 @@ begin
     0: CallbackMouseDown(Form, X, Y, MouseButton, BrowserShiftState(Modifiers));
     1: CallbackMouseUp(Form, X, Y, MouseButton, BrowserShiftState(Modifiers));
     2: CallbackMouseMove(Form, X, Y, BrowserShiftState(Modifiers));
+    3..5: CallbackMouseDown(Form, X, Y, MouseButton, BrowserShiftState(Modifiers), Kind-1);
   end;
   if Kind = 2 then
   begin
