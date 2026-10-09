@@ -261,22 +261,12 @@ begin
 end;
 
 procedure DestroyDOMControl(Control: TWinControl);
-var Entry: TDOMControl; List: TFPList; ParentHandle: TCDWinControl;
+var Entry: TDOMControl;
 begin
   Entry := FindEntry(Control);
   if Entry = nil then Exit;
   Entries.Remove(Entry);
   Entry.Free;
-  if Control.Parent is TCustomForm then
-  begin
-    List := GetCDWinControlList(TCustomForm(Control.Parent));
-    if List <> nil then List.Remove(Pointer(Control.Handle));
-  end else if Control.Parent <> nil then
-  begin
-    ParentHandle := TCDWinControl(Control.Parent.Handle);
-    ParentHandle.Region.Childs.Remove(TCDWinControl(Control.Handle).Region);
-    if ParentHandle.Children <> nil then ParentHandle.Children.Remove(Pointer(Control.Handle));
-  end;
   if Control is TCustomEdit then TCDWSCustomEdit.DestroyHandle(Control)
   else TCDWinControl(Control.Handle).Free;
 end;
