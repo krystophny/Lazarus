@@ -15,20 +15,29 @@ const textContext = textCanvas.getContext('2d', {willReadFrequently: true});
 const decoder = new TextDecoder();
 const api = {};
 let image, currentFont = "13px sans-serif", fontStyle = 0, fontAngle = 0;
-let wake = null, pointerIdleTimer, lastHoverMove = 0;
+const messageWaiters = [];
+let activeForm = 0;
+let pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
 let instance, ready = false, scheduled = false, pendingMove = null;
 const text = (pointer, length) => decoder.decode(new Uint8Array(instance.exports.memory.buffer, pointer, length));
 function fail(error) {
   ready = false;
-  if (wake) { const done = wake; wake = null; done(); }
+  wakeMessage();
   // Name the innermost Pascal routines so a report locates the failure.
   const frames = String(error.stack || '').match(/at [A-Z0-9_$]+\$\$?_?[A-Z0-9_$]*/g) || [];
   const where = frames.slice(0, 6).map(frame => frame.slice(3)).join(' ← ');
   status.textContent = `Application error: ${error.message || error}${where ? ` in ${where}` : ''}`;
   status.dataset.state = 'error';
   console.error(error);
+}
+function wakeMessage() {
+  for (let i = messageWaiters.length-1; i >= 0; i--) {
+    if (messageWaiters[i].form !== activeForm) continue;
+    const [{resolve}] = messageWaiters.splice(i, 1);
+    resolve();
+  }
 }
 function guarded(callback) {
   try { const result = callback(); if (result?.catch) result.catch(fail); } catch (error) { fail(error); }
@@ -44,12 +53,15 @@ function invalidate() {
 }
 const imports = {
   invalidate,
-  wait_message: new WebAssembly.Suspending(() => new Promise(resolve => { wake = resolve; invalidate(); })),
+  active_form: form => { activeForm = form; },
+  wait_message: new WebAssembly.Suspending(form => new Promise(resolve => {
+    messageWaiters.push({form, resolve}); invalidate();
+  })),
   control_bind: (pointer, idPtr, idLen) => {
     const element = document.getElementById(text(idPtr, idLen));
     const dispatch = () => guarded(async () => {
       await api.lcl_control(pointer);
-      if (wake) { const done = wake; wake = null; done(); }
+      wakeMessage();
     });
     const editable = element.matches('textarea, input:not([type=checkbox])');
     const routesKey = event => event.key === 'Escape' || event.key === 'Tab'
@@ -73,7 +85,7 @@ const imports = {
   timer: (handle, interval) => setInterval(() => {
     if (ready) guarded(async () => {
       await api.lcl_timer(handle);
-      if (wake) { const done = wake; wake = null; done(); }
+      wakeMessage();
     });
   }, interval),
   clear_timer: handle => clearInterval(handle),
@@ -320,7 +332,7 @@ function pointer(kind, x, y, button, modifiers) {
     await api.lcl_pointer(kind, x, y, button, modifiers);
     clearTimeout(pointerIdleTimer);
     if (kind === 2) pointerIdleTimer = setTimeout(() => guarded(() => api.lcl_idle()), 120);
-    if (wake) { const done = wake; wake = null; done(); }
+    wakeMessage();
   });
 }
 // Drag previews follow the display cadence. Hover coordinates and crosshairs
@@ -381,7 +393,7 @@ function key(kind, event, fromControl = false) {
   guarded(async () => {
     await (kind === 2 ? api.lcl_key(2, code, event.key.codePointAt(0), modifiers(event))
       : api.lcl_key(kind, code, 0, modifiers(event)));
-    if (wake) { const done = wake; wake = null; done(); }
+    wakeMessage();
   });
 }
 document.addEventListener('keydown', event => { key(0, event); if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) key(2, event); });

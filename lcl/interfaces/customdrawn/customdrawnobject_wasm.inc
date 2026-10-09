@@ -3,7 +3,7 @@
 
 procedure BrowserPresent(Data: Pointer; Width, Height, Left, Top, Right, Bottom, Last: LongInt); external 'lcl' name 'present';
 procedure BrowserInvalidate; external 'lcl' name 'invalidate';
-procedure BrowserWaitMessage; external 'lcl' name 'wait_message';
+procedure BrowserWaitMessage(Form: PtrUInt); external 'lcl' name 'wait_message';
 procedure BrowserTitle(Text: PChar; Count: LongInt); external 'lcl' name 'title';
 function BrowserMessage(Text, Caption: PChar; CountText, CountCaption: LongInt;
   Flags: LongInt): LongInt; external 'lcl' name 'message';
@@ -362,7 +362,7 @@ end;
 
 procedure TCDWidgetSet.AppWaitMessage;
 begin
-  BrowserWaitMessage;
+  BrowserWaitMessage(PtrUInt(GetCurrentForm));
 end;
 
 procedure TCDWidgetSet.AppTerminate;
