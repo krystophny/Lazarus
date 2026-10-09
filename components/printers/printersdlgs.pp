@@ -188,6 +188,10 @@ implementation
   {$ENDIF}
 {$ENDIF}
 
+{$IFDEF WASI}
+  {$I wasiprndialogs.inc}
+{$ENDIF}
+
 {$IFDEF MSWindows}
   {$IFDEF LCLQt}
     uses Windows,

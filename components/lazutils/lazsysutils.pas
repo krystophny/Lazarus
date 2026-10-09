@@ -24,7 +24,7 @@ uses
   {$IFDEF Windows}
     Windows,
   {$ELSE}
-    {$IFnDEF HASAMIGA}
+    {$IFDEF UNIX}
       Unix, BaseUnix,
     {$ENDIF}
   {$ENDIF}
