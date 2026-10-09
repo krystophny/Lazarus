@@ -3,11 +3,15 @@
 program jobhost;
 {$mode objfpc}
 uses JS, WebAssembly, WasiEnv, JOB_Browser;
-var Environment: TPas2JSWASIEnvironment;
-    Bridge: TJSObjectBridge;
-    JobImports, HostObject: TJSObject;
+var
+  Environment: TPas2JSWASIEnvironment;
+  Bridge: TJSObjectBridge;
+  JobImports, HostObject: TJSObject;
 procedure Connect(Instance: TJSWebAssemblyInstance);
-begin Environment.Instance := Instance; Environment.SetExports(TWASIExports(Instance.exports_)); end;
+begin
+  Environment.Instance := Instance;
+  Environment.SetExports(TWASIExports(Instance.exports_));
+end;
 begin
   Environment := TPas2JSWASIEnvironment.Create;
   Bridge := TJSObjectBridge.Create(Environment);

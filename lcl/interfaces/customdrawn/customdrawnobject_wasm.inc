@@ -75,7 +75,9 @@ begin
 end;
 
 function BrowserMenuJSON(Item: TMenuItem): TJSONObject;
-var Children: TJSONArray; I: Integer;
+var
+  Children: TJSONArray;
+  I: Integer;
 begin
   Result := TJSONObject.Create(['id', PtrInt(Item), 'caption', Item.Caption,
     'enabled', Item.Enabled, 'visible', Item.Visible, 'checked', Item.Checked]);
@@ -85,7 +87,10 @@ begin
 end;
 
 procedure SyncBrowserMenus;
-var Form: TCDNonNativeForm; Data: TJSONObject; JSON: String;
+var
+  Form: TCDNonNativeForm;
+  Data: TJSONObject;
+  JSON: String;
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
@@ -108,7 +113,9 @@ begin
 end;
 
 procedure LCLWasmMenu(Handle: LongInt); cdecl;
-var Item: TMenuItem; Form: TCDNonNativeForm;
+var
+  Item: TMenuItem;
+  Form: TCDNonNativeForm;
   function FindItem(Root: TMenuItem): TMenuItem;
   var I: Integer;
   begin
