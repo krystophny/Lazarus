@@ -312,6 +312,14 @@ begin
 
   lEventPos := FormPosToControlPos(lTarget, x, y);
   LCLSendMouseMoveMsg(lTarget, lEventPos.x, lEventPos.y, ShiftState);
+  { Applications such as TpX paint their crosshair cursor straight onto the
+    control canvas inside MouseMove. On native widgetsets that writing goes
+    directly to the window; in the browser the frame is composed from the
+    control image, so a move that only painted has to invalidate the surface or
+    the cursor never follows the pointer. Chrome controls are excluded to keep
+    hovering over panels and toolbars free of repaints. }
+  if lTarget is TCustomControl then
+    LCLIntf.InvalidateRect(HWND(lTarget), nil, False);
 
   // If this is a interface control, send the message to the main LCL control too
   if IsIntfControl(lTarget) then
