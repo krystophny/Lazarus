@@ -20,7 +20,7 @@ let activeForm = 0;
 let pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
-let instance, ready = false, scheduled = false, pendingMove = null;
+let instance, ready = false, scheduled = false, paintRequested = false, pendingMove = null;
 const text = (pointer, length) => decoder.decode(new Uint8Array(instance.exports.memory.buffer, pointer, length));
 function fail(error) {
   ready = false;
@@ -42,20 +42,27 @@ function wakeMessage() {
 function guarded(callback) {
   try { const result = callback(); if (result?.catch) result.catch(fail); } catch (error) { fail(error); }
 }
-function invalidate() {
+function invalidate(paint = false) {
+  paintRequested ||= paint;
   if (scheduled) return;
   scheduled = true;
   requestAnimationFrame(() => {
-    scheduled = false;
+    // Pointer callbacks may invalidate during this frame. Collect their damage
+    // before allowing another frame to be scheduled.
     flushMove();
-    if (ready) guarded(() => api.lcl_render());
+    scheduled = false;
+    if (ready && paintRequested) {
+      paintRequested = false;
+      guarded(() => api.lcl_render());
+    }
+    if (pendingMove) invalidate();
   });
 }
 const imports = {
-  invalidate,
+  invalidate: () => invalidate(true),
   active_form: form => { activeForm = form; },
   wait_message: new WebAssembly.Suspending(form => new Promise(resolve => {
-    messageWaiters.push({form, resolve}); invalidate();
+    messageWaiters.push({form, resolve}); invalidate(true);
   })),
   control_bind: (pointer, idPtr, idLen) => {
     const element = document.getElementById(text(idPtr, idLen));
@@ -518,7 +525,7 @@ async function start() {
   status.textContent = 'Ready';
   status.dataset.state = 'ready';
   resize();
-  invalidate();
+  invalidate(true);
 }
 await start().catch(fail);
 }
