@@ -185,8 +185,24 @@ begin
 end;
 
 function TCDWidgetSet.MessageBox(hWnd: HWND; lpText, lpCaption: PChar; uType: Cardinal): integer;
+var
+  Text, Caption: string;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: MessageBox is not implemented');
+  { A raise here killed the whole instance: any application that reports an error
+    or a disabled feature (TpX does this for LaTeX, sam2p, MetaPost and printing,
+    all unavailable in a browser) died with a host-side application error instead
+    of telling the user anything. Show the text through the host and answer with
+    the button the flags ask for, so the caller's logic keeps working. }
+  Text := '';
+  if lpText <> nil then Text := lpText;
+  Caption := '';
+  if lpCaption <> nil then Caption := lpCaption;
+  BrowserMessage(PChar(Text), PChar(Caption), Length(Text), Length(Caption),
+    Integer(uType));
+  if (uType and $0000000F) = MB_YESNO then
+    Result := mrYes
+  else
+    Result := mrOk;
 end;
 
 
