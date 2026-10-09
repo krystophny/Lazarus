@@ -106,6 +106,7 @@ implementation
 uses
  CheckLst,
  CustomDrawnWSButtons,
+ {$ifdef CPUWASM32}CustomDrawnWSDialogs,{$endif}
  {$ifdef CPUWASM32}CustomDrawnWasmDOM,{$endif}
 { WinCEWSCalendar,}
  customdrawnwschecklst,
@@ -234,23 +235,43 @@ end;
 // dialogs
 function RegisterCommonDialog: Boolean; alias : 'WSRegisterCommonDialog';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TCommonDialog, TCDWSCommonDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterFileDialog: Boolean; alias : 'WSRegisterFileDialog';
 begin
 //  RegisterWSComponent(TFileDialog, TWinCEWSFileDialog);
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TFileDialog, TCDWSFileDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterOpenDialog: Boolean; alias : 'WSRegisterOpenDialog';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TOpenDialog, TCDWSOpenDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterSaveDialog: Boolean; alias : 'WSRegisterSaveDialog';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TSaveDialog, TCDWSSaveDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterSelectDirectoryDialog: Boolean; alias : 'WSRegisterSelectDirectoryDialog';
@@ -260,7 +281,12 @@ end;
 
 function RegisterColorDialog: Boolean; alias : 'WSRegisterColorDialog';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TColorDialog, TCDWSColorDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterColorButton: Boolean; alias : 'WSRegisterColorButton';
@@ -270,7 +296,12 @@ end;
 
 function RegisterFontDialog: Boolean; alias : 'WSRegisterFontDialog';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TFontDialog, TCDWSFontDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterTaskDialog: Boolean; alias : 'WSRegisterTaskDialog';

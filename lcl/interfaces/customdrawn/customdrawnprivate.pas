@@ -165,6 +165,7 @@ procedure CallbackMouseLeave(AWindowHandle: TCDForm);
 procedure CallbackKeyDown(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyUp(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyChar(AWindowHandle: TCDForm; AKeyData: Word; AChar: TUTF8Char);
+procedure ForgetBrowserControl(AControl: TWinControl);
 function IsIntfControl(AControl: TWinControl): Boolean;
 
 implementation
@@ -173,6 +174,11 @@ uses customdrawnint, LCLMessageGlue, customdrawndrawers, Clipbrd;
 
 var
   BrowserMouseTarget: TWinControl = nil;
+
+procedure ForgetBrowserControl(AControl: TWinControl);
+begin
+  if BrowserMouseTarget = AControl then BrowserMouseTarget := nil;
+end;
 
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 var

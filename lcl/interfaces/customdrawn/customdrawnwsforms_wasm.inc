@@ -67,7 +67,7 @@ end;
 
 class procedure TCDWSCustomForm.ShowModal(const ACustomForm: TCustomForm);
 begin
-  raise ENotSupportedException.Create('Blocking modal forms are unsupported in the browser');
+  ShowHide(ACustomForm);
 end;
 
 class procedure TCDWSCustomForm.ShowHide(const AWinControl: TWinControl);
