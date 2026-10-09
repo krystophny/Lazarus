@@ -521,6 +521,11 @@ begin
     end;
   end;
 
+  {$ifdef CPUWASM32}
+  // Complete LCL's key processing, including default/cancel dialog buttons.
+  if AKey <> 0 then LCLSendKeyDownEvent(lTarget, AKey, 0, False, False);
+  {$endif}
+
   // If the control didn't eat the tab, then circle around controls
   // Shift+Tab circles in the opposite direction
   lIsTab := lIsTab and (AKey = VK_TAB);
@@ -572,6 +577,9 @@ begin
     lTarget := lTarget.Parent;
     LCLSendKeyUpEvent(lTarget, AKey, 0, True, False);
   end;
+  {$ifdef CPUWASM32}
+  if AKey <> 0 then LCLSendKeyUpEvent(lTarget, AKey, 0, False, False);
+  {$endif}
 end;
 
 procedure CallbackKeyChar(AWindowHandle: TCDForm; AKeyData: Word; AChar: TUTF8Char);

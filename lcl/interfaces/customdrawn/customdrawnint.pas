@@ -99,6 +99,7 @@ type
 
   TLazCDCustomFont = class(TFPCustomFont)
   public
+    {$ifdef CD_Wasm}Angle: Integer;{$endif}
     {$ifndef CD_UseNativeText}
     FTFont: TFreeTypeFont;
     {$endif}
@@ -690,6 +691,7 @@ exports
   LCLWasmWheel name 'lcl_wheel',
   LCLWasmTimer name 'lcl_timer',
   LCLWasmControl name 'lcl_control',
+  LCLWasmFocus name 'lcl_focus',
   LCLWasmMenu name 'lcl_menu',
   LCLWasmIdle name 'lcl_idle';
 {$endif}

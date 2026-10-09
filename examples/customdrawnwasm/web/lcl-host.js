@@ -14,7 +14,7 @@ const textCanvas = document.createElement('canvas');
 const textContext = textCanvas.getContext('2d', {willReadFrequently: true});
 const decoder = new TextDecoder();
 const api = {};
-let image;
+let image, currentFont = "13px sans-serif", fontStyle = 0, fontAngle = 0;
 let wake = null, pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
@@ -46,31 +46,64 @@ const imports = {
   invalidate,
   wait_message: new WebAssembly.Suspending(() => new Promise(resolve => { wake = resolve; invalidate(); })),
   control_bind: (pointer, idPtr, idLen) => {
-    document.getElementById(text(idPtr, idLen)).onclick = event => {
-      event.stopPropagation();
-      guarded(async () => { await api.lcl_control(pointer); if (wake) { const done = wake; wake = null; done(); } });
+    const element = document.getElementById(text(idPtr, idLen));
+    const dispatch = () => guarded(async () => {
+      await api.lcl_control(pointer);
+      if (wake) { const done = wake; wake = null; done(); }
+    });
+    const editable = element.matches('textarea, input:not([type=checkbox])');
+    const routesKey = event => event.key === 'Escape' || event.key === 'Tab'
+      || (editable && event.key === 'Enter' && element.tagName !== 'TEXTAREA');
+    element.onfocus = () => guarded(() => api.lcl_focus(pointer));
+    element.onkeydown = event => {
+      if (!event.isComposing && routesKey(event)) {
+        event.preventDefault(); key(0, event, true);
+      }
     };
+    element.onkeyup = event => {
+      if (!event.isComposing && routesKey(event)) key(1, event, true);
+    };
+    if (editable) {
+      element.oninput = event => { if (!event.isComposing) dispatch(); };
+      element.oncompositionend = dispatch;
+      element.onselect = dispatch;
+    } else element.onclick = event => { event.stopPropagation(); dispatch(); };
   },
   title: (pointer, length) => { document.title = text(pointer, length); },
   timer: (handle, interval) => setInterval(() => {
-    if (ready) guarded(() => api.lcl_timer(handle));
+    if (ready) guarded(async () => {
+      await api.lcl_timer(handle);
+      if (wake) { const done = wake; wake = null; done(); }
+    });
   }, interval),
   clear_timer: handle => clearInterval(handle),
+  font: (pointer, length, size, style, angle) => {
+    const name = text(pointer, length).replace(/["\\]/g, '') || 'sans-serif';
+    currentFont = `${style & 2 ? 'italic ' : ''}${style & 1 ? 'bold ' : ''}${size}px "${name}", sans-serif`;
+    fontStyle = style; fontAngle = -angle * Math.PI / 1800;
+  },
   measure: (pointer, length, size) => {
-    textContext.font = `${size}px sans-serif`;
+    textContext.font = currentFont;
     return Math.ceil(textContext.measureText(text(pointer, length)).width);
   },
   text: (pointer, width, height, x, y, string, length, size, color, left, top, right, bottom) => {
     if (textCanvas.width !== width) textCanvas.width = width;
     if (textCanvas.height !== height) textCanvas.height = height;
-    textContext.font = `${size}px sans-serif`;
+    textContext.font = currentFont;
     textContext.textBaseline = 'top';
     const stringValue = text(string, length);
     const metrics = textContext.measureText(stringValue);
-    const x0 = Math.max(0, left, Math.floor(x-metrics.actualBoundingBoxLeft));
-    const y0 = Math.max(0, top, Math.floor(y-metrics.actualBoundingBoxAscent));
-    const x1 = Math.min(width, right, Math.ceil(x+metrics.actualBoundingBoxRight));
-    const y1 = Math.min(height, bottom, Math.ceil(y+metrics.actualBoundingBoxDescent));
+    const c = Math.cos(fontAngle), s = Math.sin(fontAngle);
+    const glyphLeft = -metrics.actualBoundingBoxLeft;
+    const glyphTop = -metrics.actualBoundingBoxAscent;
+    const glyphRight = metrics.actualBoundingBoxRight;
+    const glyphBottom = Math.max(metrics.actualBoundingBoxDescent, fontStyle & 4 ? size : 0);
+    const corners = [[glyphLeft,glyphTop],[glyphRight,glyphTop],[glyphLeft,glyphBottom],[glyphRight,glyphBottom]]
+      .map(([gx,gy]) => [x+gx*c-gy*s, y+gx*s+gy*c]);
+    const x0 = Math.max(0, left, Math.floor(Math.min(...corners.map(p=>p[0])))-1);
+    const y0 = Math.max(0, top, Math.floor(Math.min(...corners.map(p=>p[1])))-1);
+    const x1 = Math.min(width, right, Math.ceil(Math.max(...corners.map(p=>p[0])))+1);
+    const y1 = Math.min(height, bottom, Math.ceil(Math.max(...corners.map(p=>p[1])))+1);
     if (x1 <= x0 || y1 <= y0) return;
     textContext.clearRect(x0, y0, x1-x0, y1-y0);
     textContext.save();
@@ -78,7 +111,10 @@ const imports = {
     textContext.beginPath();
     textContext.rect(x0, y0, x1-x0, y1-y0);
     textContext.clip();
-    textContext.fillText(stringValue, x, y);
+    textContext.translate(x,y); textContext.rotate(fontAngle);
+    textContext.fillText(stringValue,0,0);
+    if (fontStyle & 4) textContext.fillRect(0,size-1,metrics.width,Math.max(1,size/16));
+    if (fontStyle & 8) textContext.fillRect(0,size*.5,metrics.width,Math.max(1,size/16));
     textContext.restore();
     const layer = textContext.getImageData(x0, y0, x1-x0, y1-y0).data;
     const pixels = new Uint8Array(instance.exports.memory.buffer, pointer, width*height*4);
@@ -107,7 +143,7 @@ const imports = {
   message: new WebAssembly.Suspending((textPtr, captionPtr, textLen, captionLen, flags) => {
     const sets = [[1], [1,2], [3,4,5], [6,7,2], [6,7], [4,2]];
     return showDialog({kind:'message', caption:text(captionPtr,captionLen),
-      message:text(textPtr,textLen), buttons:sets[flags & 15] || [1], escape:2});
+      message:text(textPtr,textLen), buttons:sets[flags & 15] || [1], escape:(flags & 15) === 0 ? 1 : 2});
   }),
   menus: (pointer, length) => updateMenus(text(pointer, length)),
   present: (pointer, width, height, left = 0, top = 0, right = width, bottom = height, last = 1) => {
@@ -129,7 +165,7 @@ const imports = {
   }
 };
 const buttonNames = {1:'OK', 2:'Cancel', 3:'Abort', 4:'Retry', 5:'Ignore', 6:'Yes', 7:'No',
-  8:'Close', 9:'Help', 10:'Try again', 11:'Continue', 12:'Ignore', 13:'All', 14:'No to all', 15:'Yes to all'};
+  8:'All', 9:'No to all', 10:'Yes to all', 11:'Close', 12:'Continue', 13:'Try again'};
 function showDialog(options) {
   const dialog = document.createElement('dialog');
   dialog.setAttribute('aria-label', options.caption || 'TpX');
@@ -148,15 +184,20 @@ function showDialog(options) {
       dialog.close(); dialog.remove(); resolve(value); canvas.focus({preventScroll:true});
     }
     const choices = options.buttons || [1,2];
-    choices.forEach((id, index) => {
+    choices.forEach((choice, index) => {
+      const id = typeof choice === 'object' ? choice.id : choice;
       const button = document.createElement('button');
-      button.textContent = buttonNames[id] || String(id);
+      button.textContent = choice.caption || buttonNames[id] || String(id);
       button.type = 'button';
       button.addEventListener('click', () => finish(id));
       if (index === (options.default || 0)) button.autofocus = true;
       buttons.append(button);
     });
-    dialog.addEventListener('cancel', event => { event.preventDefault(); finish(options.escape ?? 2); });
+    dialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      if (options.escape === -1) return;
+      finish(options.escape ?? (choices.includes(2) ? 2 : typeof choices[0] === 'object' ? choices[0].id : choices[0]));
+    });
     dialog.showModal();
   });
 }
@@ -175,7 +216,7 @@ function commonDialog(options) {
     if (type==='checkbox') input.checked=Boolean(value); else input.value=value ?? '';
     row.append(input); form.append(row); fields[name]=input; return input;
   }
-  if (options.kind==='open') field('file', 'Choose file', 'file');
+  if (options.kind==='open') field('file', 'Choose file', 'file').multiple = Boolean(options.multiple);
   if (options.kind==='save') field('filename', 'File name', 'text', options.filename || 'drawing.tpx');
   if (options.kind==='open' || options.kind==='save') {
     const label=document.createElement('label'); label.textContent='File type ';
@@ -195,6 +236,7 @@ function commonDialog(options) {
     field('name','Font family','text',options.name || 'sans-serif');
     const size=field('size','Size (pt)','number',options.size || 12); size.min=1; size.max=1000;
     field('bold','Bold','checkbox',options.bold); field('italic','Italic','checkbox',options.italic);
+    field('underline','Underline','checkbox',options.underline); field('strikeout','Strikeout','checkbox',options.strikeout);
   }
   const footer=document.createElement('div'); footer.style.cssText='display:flex;gap:12px;justify-content:flex-end;margin-top:20px';
   const ok=document.createElement('button'); ok.type='submit'; ok.textContent='OK';
@@ -209,19 +251,22 @@ function commonDialog(options) {
       if (!form.reportValidity()) return;
       let result;
       if (options.kind==='open') {
-        const file=fields.file.files[0]; if (!file) return;
-        fileSystem.dir.contents.set(file.name, new File(new Uint8Array(await file.arrayBuffer())));
-        result={filename:'/'+file.name,filterIndex:Number(fields.filterIndex.value)};
+        const files=Array.from(fields.file.files); if (!files.length) return;
+        for (const file of files) {
+          fileSystem.dir.contents.set(file.name, new File(new Uint8Array(await file.arrayBuffer())));
+          downloadPaths.add(file.name);
+        }
+        result={filename:'/'+files[0].name,files:files.map(file=>'/'+file.name),filterIndex:Number(fields.filterIndex.value)};
       } else if (options.kind==='save') {
         let name=fields.filename.value.trim().replace(/[/\\]/g,'_'); if (!name) return;
         const pattern=fields.filterIndex.selectedOptions[0]?.dataset.pattern || '';
-        const ext=(pattern.match(/\*\.(\w+)/)||[])[1] || options.defaultExt;
+        const ext=(pattern.match(/\*\.(\w+)/)||[])[1] || (options.defaultExt || '').replace(/^\./,'');
         if (ext && !name.toLowerCase().endsWith('.'+ext.toLowerCase())) name+='.'+ext;
         downloadPaths.add(name); result={filename:'/'+name,filterIndex:Number(fields.filterIndex.value)};
       } else if (options.kind==='color') {
         const c=Number.parseInt(fields.color.value.slice(1),16);
         result={color:((c&255)<<16)|(c&65280)|((c>>>16)&255)};
-      } else result={name:fields.name.value,size:Number(fields.size.value),bold:fields.bold.checked,italic:fields.italic.checked};
+      } else result={name:fields.name.value,size:Number(fields.size.value),bold:fields.bold.checked,italic:fields.italic.checked,underline:fields.underline.checked,strikeout:fields.strikeout.checked};
       finish(result);
     };
     dialog.showModal();
@@ -300,7 +345,7 @@ for (const [name, kind] of [['pointerdown', 0], ['pointerup', 1], ['pointermove'
     const bounds = canvas.getBoundingClientRect();
     const x = Math.round((event.clientX-bounds.left)*canvas.width/bounds.width);
     const y = Math.round((event.clientY-bounds.top)*canvas.height/bounds.height);
-    const modifiers = Number(event.shiftKey) | Number(event.ctrlKey)<<1 | Number(event.altKey)<<2 | Number(event.buttons&1)<<3;
+    const modifiers = Number(event.shiftKey) | Number(event.ctrlKey || event.metaKey)<<1 | Number(event.altKey)<<2 | Number(event.buttons&1)<<3;
     if (kind === 2) {
       pendingMove = [x, y, event.button, modifiers];
       invalidate();
@@ -327,11 +372,11 @@ function vk(key) {
   if (/^F([1-9]|1[0-2])$/.test(key)) return 111 + Number(key.slice(1));
   return 0;
 }
-const modifiers = event => Number(event.shiftKey) | Number(event.ctrlKey) << 1 |
+const modifiers = event => Number(event.shiftKey) | Number(event.ctrlKey || event.metaKey) << 1 |
   Number(event.altKey) << 2 | Number(event.buttons & 1) << 3;
-function key(kind, event) {
-  if (!ready || (event.target !== canvas && event.target.closest?.('dialog, #lcl-dom, #lcl-menus'))) return;
-  if (PREVENT.has(event.key)) event.preventDefault();
+function key(kind, event, fromControl = false) {
+  if (!ready || (!fromControl && event.target !== canvas && event.target.closest?.('dialog, #lcl-dom, #lcl-menus'))) return;
+  if (PREVENT.has(event.key) || ((event.ctrlKey || event.metaKey) && event.key.length === 1)) event.preventDefault();
   const code = vk(event.key);
   guarded(async () => {
     await (kind === 2 ? api.lcl_key(2, code, event.key.codePointAt(0), modifiers(event))
@@ -339,7 +384,7 @@ function key(kind, event) {
     if (wake) { const done = wake; wake = null; done(); }
   });
 }
-document.addEventListener('keydown', event => { key(0, event); if (event.key.length === 1 && !event.ctrlKey && !event.altKey) key(2, event); });
+document.addEventListener('keydown', event => { key(0, event); if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) key(2, event); });
 document.addEventListener('keyup', event => key(1, event));
 canvas.addEventListener('wheel', event => {
   if (!ready) return;
