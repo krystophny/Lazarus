@@ -1,7 +1,7 @@
 { Browser platform backend for the LCL CustomDrawn interface.
   See COPYING.modifiedLGPL.txt for license and linking exception. }
 
-procedure BrowserPresent(Data: Pointer; Width, Height: LongInt); external 'lcl' name 'present';
+procedure BrowserPresent(Data: Pointer; Width, Height, DirtyX, DirtyY, DirtyW, DirtyH: LongInt); external 'lcl' name 'present';
 procedure BrowserInvalidate; external 'lcl' name 'invalidate';
 procedure BrowserTitle(Text: PChar; Count: LongInt); external 'lcl' name 'title';
 function BrowserTimer(Handle, Interval: LongInt): LongInt; external 'lcl' name 'timer';
@@ -17,6 +17,11 @@ type
 var
   { Set by any invalidation; frames without it skip composing and presenting. }
   BrowserDirty: Boolean = True;
+  { Union of the invalidated areas since the last present, in form client pixels.
+    The host converts and uploads only this part of the surface: a full
+    1068x791 convert-and-upload per cursor move cost 45% of a core, while the
+    few thousand pixels of a crosshair move are invisible to the budget. }
+  BrowserDirtyRect: TRect;
   BrowserInIdle: Boolean = False;
   BrowserWidth: LongInt = 720;
   BrowserHeight: LongInt = 480;
@@ -84,10 +89,32 @@ begin
   LCLWasmIdle;
 end;
 
+procedure BrowserMarkDirty(const ARect: TRect);
+begin
+  if IsRectEmpty(ARect) then Exit;
+  if not BrowserDirty then BrowserDirtyRect := Rect(0, 0, 0, 0);
+  if IsRectEmpty(BrowserDirtyRect)
+    then BrowserDirtyRect := ARect
+    else UnionRect(BrowserDirtyRect, BrowserDirtyRect, ARect);
+  BrowserDirty := True;
+end;
+
+procedure BrowserMarkAllDirty(AWidth, AHeight: LongInt);
+begin
+  BrowserDirtyRect := Rect(0, 0, AWidth, AHeight);
+  BrowserDirty := True;
+end;
+
+procedure BrowserMarkDirtySize(ALeft, ATop, AWidth, AHeight: LongInt);
+begin
+  BrowserMarkDirty(Rect(ALeft, ATop, ALeft + AWidth, ATop + AHeight));
+end;
+
 procedure LCLWasmRender; cdecl;
 var
   Form: TCDNonNativeForm;
   Raw: TRawImage;
+  Dirty: TRect;
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
@@ -98,7 +125,12 @@ begin
     Form.LCLForm.ClientWidth, Form.LCLForm.ClientHeight, clfARGB32);
   RenderForm(Form.Image, Form.Canvas, Form.LCLForm);
   Form.Image.GetRawImage(Raw);
-  BrowserPresent(Raw.Data, Form.Image.Width, Form.Image.Height);
+  Dirty := BrowserDirtyRect;
+  BrowserDirtyRect := Rect(0, 0, 0, 0);
+  if not IntersectRect(Dirty, Dirty, Rect(0, 0, Form.Image.Width, Form.Image.Height))
+    then Exit;
+  BrowserPresent(Raw.Data, Form.Image.Width, Form.Image.Height,
+    Dirty.Left, Dirty.Top, Dirty.Right - Dirty.Left, Dirty.Bottom - Dirty.Top);
 end;
 
 procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
@@ -154,9 +186,9 @@ procedure LCLWasmResize(Width, Height: LongInt); cdecl;
 var
   Form: TCDNonNativeForm;
 begin
-  BrowserDirty := True;
   BrowserWidth := Max(1, Width);
   BrowserHeight := Max(1, Height);
+  BrowserMarkAllDirty(BrowserWidth, BrowserHeight);
   Form := GetCurrentForm;
   if Form <> nil then Form.LCLForm.SetBounds(0, 0, BrowserWidth, BrowserHeight);
   LCLWasmIdle;
@@ -211,13 +243,13 @@ end;
 
 procedure TCDWidgetSet.AppRestore;
 begin
-  BrowserDirty := True;
+  BrowserMarkAllDirty(BrowserWidth, BrowserHeight);
   BrowserInvalidate;
 end;
 
 procedure TCDWidgetSet.AppBringToFront;
 begin
-  BrowserDirty := True;
+  BrowserMarkAllDirty(BrowserWidth, BrowserHeight);
   BrowserInvalidate;
 end;
 
@@ -248,7 +280,7 @@ end;
 
 procedure TCDWidgetSet.AppSetVisible(const AVisible: Boolean);
 begin
-  BrowserDirty := True;
+  BrowserMarkAllDirty(BrowserWidth, BrowserHeight);
   BrowserInvalidate;
 end;
 
