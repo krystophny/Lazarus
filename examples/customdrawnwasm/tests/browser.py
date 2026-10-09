@@ -82,6 +82,7 @@ with sync_playwright() as p:
     # Exercise the platform resize boundary; the LFM's Anchors must grow the paintbox.
     old = frame()
     page.evaluate('lclDemo.lcl_resize(800,520)')
+    page.wait_for_function('document.querySelector("#lcl").width === 800 && document.querySelector("#lcl").height === 520')
     painted_after(old)
     assert page.locator('#lcl').get_attribute('width') == '800'
     assert pixel(760, 490) == [255, 255, 255, 255], pixel(760, 490)
