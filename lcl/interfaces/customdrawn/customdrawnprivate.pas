@@ -238,11 +238,11 @@ begin
   AWindowHandle.IsScrolling := False;
 end;
 
-{ True when a click on this control must not move keyboard focus: toolbars,
-  panels and status bars are chrome, not editing surfaces. }
+{ Keep document focus when clicking chrome unless it explicitly accepts focus. }
 function IsControlBar(AControl: TWinControl): Boolean;
 begin
-  Result := (AControl is TToolBar) or (AControl is TPanel) or (AControl is TStatusBar);
+  Result := ((AControl is TToolBar) or (AControl is TPanel)
+    or (AControl is TStatusBar)) and not AControl.TabStop;
 end;
 
 {$ifdef CPUWASM32}
@@ -291,10 +291,7 @@ begin
   //DebugLn(Format('CallbackMouseDown lEventPos X=%d y=%d lTarget %s:%s',
   //  [lEventPos.X, lEventPos.y, lTarget.Name, lTarget.ClassName]));
   AWindowHandle.LastMouseDownControl := lTarget;
-  { Native widgetsets do not give keyboard focus to a toolbar, panel or status bar
-    when the user clicks one: the previously focused control, typically the
-    document, keeps it. Taking focus here stranded every shortcut (Escape, Ctrl+Z,
-    arrows) on the bar and the drawing area stopped responding to the keyboard. }
+  { Decorative controls must not steal the focused editor's keyboard input. }
   if (lTarget <> nil) and not IsControlBar(lTarget) then
   begin
     AWindowHandle.FocusedControl := lTarget;
