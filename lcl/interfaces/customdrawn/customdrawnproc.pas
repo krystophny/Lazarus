@@ -590,9 +590,6 @@ begin
   ACanvas.SaveState;
   ACanvas.ResetCanvasState;
 
-  // lBaseWindowOrg makes debugging easier
-  // Iterate to find the appropriate BaseWindowOrg relative to the parent control
-  lBaseWindowOrg := FindControlPositionRelativeToTheForm(lWinControl);
   ACanvas.BaseWindowOrg := Point(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY);
   ACanvas.WindowOrg := Point(0, 0);
 
@@ -601,10 +598,11 @@ begin
   ACDWinControl.Region.Rect := Bounds(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY,
     lWinControl.Width, lWinControl.Height);
   lRegion := TLazRegionWithChilds.Create;
-  lRegion.Assign(ACDWinControl.Region);
   if APaintRect <> nil then
     lRegion.SetAsSimpleRectRegion(Rect(PaintRect.Left, PaintRect.Top,
-      PaintRect.Right-1, PaintRect.Bottom-1));
+      PaintRect.Right-1, PaintRect.Bottom-1))
+  else
+    lRegion.Assign(ACDWinControl.Region);
   ACanvas.ClipRegion := lRegion;
 
   lControlCanvas := ACanvas;
