@@ -178,30 +178,8 @@ begin
 end;
 
 function TCDWidgetSet.BackendInvalidateRect(aHandle: HWND; Rect: pRect; bErase: Boolean): Boolean;
-var
-  Control: TWinControl;
-  Origin: TPoint;
-  Area: TRect;
 begin
-  { Keep the damaged area instead of a boolean: the host uploads only what
-    changed. A nil rect means the whole control. Coordinates are form client
-    pixels, which is what the composed surface and present() use. }
-  Control := BrowserControl(aHandle);
-  if Control = nil then
-    BrowserMarkAllDirty(BrowserWidth, BrowserHeight)
-  else
-  begin
-    Origin := FindControlPositionRelativeToTheForm(Control, False);
-    if Rect = nil then
-    begin
-      Area.Left := 0; Area.Top := 0;
-      Area.Right := Control.Width; Area.Bottom := Control.Height;
-    end
-    else
-      Area := Rect^;
-    OffsetRect(Area, Origin.X, Origin.Y);
-    BrowserMarkDirty(Area);
-  end;
+  BrowserDirty := True;
   BrowserInvalidate;
   Result := True;
 end;
