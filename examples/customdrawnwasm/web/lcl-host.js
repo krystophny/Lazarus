@@ -418,7 +418,7 @@ function pointer(kind, x, y, button, modifiers) {
 function flushMove(force = false) {
   if (!pendingMove) return;
   const now = performance.now();
-  if (!force && !(pendingMove[4] & 8) && now-lastHoverMove < 32) {
+  if (!force && !(pendingMove[3] & 8) && now-lastHoverMove < 32) {
     invalidate();
     return;
   }
@@ -480,7 +480,7 @@ function key(kind, event, fromControl = false) {
     wakeMessage();
   });
 }
-document.addEventListener('keydown', event => { key(0, event); if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) key(2, event); });
+document.addEventListener('keydown', event => { key(0, event); if ([...event.key].length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) key(2, event); });
 document.addEventListener('keyup', event => key(1, event));
 canvas.addEventListener('wheel', event => {
   if (!ready) return;
