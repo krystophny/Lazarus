@@ -286,10 +286,25 @@ function commonDialog(options) {
     field('color','Color','color','#'+((c&255)<<16|(c&65280)|((c>>>16)&255)).toString(16).padStart(6,'0'));
   }
   if (options.kind==='font') {
-    field('name','Font family','text',options.name || 'sans-serif');
+    const family=field('name','Font family','text',options.name || 'sans-serif');
+    const families=document.createElement('datalist'); families.id='lcl-font-families';
+    for (const name of ['sans-serif','serif','monospace','system-ui','cursive','fantasy']) {
+      const option=document.createElement('option'); option.value=name; families.append(option);
+    }
+    family.setAttribute('list',families.id); form.append(families);
     const size=field('size','Size (pt)','number',options.size || 12); size.min=1; size.max=1000;
     field('bold','Bold','checkbox',options.bold); field('italic','Italic','checkbox',options.italic);
     field('underline','Underline','checkbox',options.underline); field('strikeout','Strikeout','checkbox',options.strikeout);
+    const sample=document.createElement('div'); sample.setAttribute('aria-label','Font sample');
+    sample.textContent='Aa Bb Cc 123 Ω'; sample.style.cssText='max-width:420px;overflow:hidden;padding:12px;border:1px solid #a5b8ce';
+    const updateSample=()=>{
+      sample.style.fontFamily=family.value;
+      sample.style.fontSize=Math.max(1,Math.min(72,Number(size.value)||12))+'pt';
+      sample.style.fontWeight=fields.bold.checked?'bold':'normal';
+      sample.style.fontStyle=fields.italic.checked?'italic':'normal';
+      sample.style.textDecoration=[fields.underline.checked?'underline':'',fields.strikeout.checked?'line-through':''].join(' ').trim()||'none';
+    };
+    form.addEventListener('input',updateSample); updateSample(); form.append(sample);
   }
   const footer=document.createElement('div'); footer.style.cssText='display:flex;gap:12px;justify-content:flex-end;margin-top:20px';
   const ok=document.createElement('button'); ok.type='submit'; ok.textContent='OK';
