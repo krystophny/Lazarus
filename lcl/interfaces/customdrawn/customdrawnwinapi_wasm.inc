@@ -68,7 +68,7 @@ begin
   Result := (Handle >= 1) and (Handle <= 1 - crLow);
 end;
 
-function TCDWidgetSet.SetCursor(ACursor: HCURSOR): HCURSOR;
+function ApplyBrowserCursor(ACursor: HCURSOR): HCURSOR;
 begin
   Result := BrowserCursorHandle;
   if ACursor = BrowserCursorHandle then Exit;
@@ -77,6 +77,16 @@ begin
     BrowserCursor(1 - LongInt(ACursor))
   else
     BrowserCursor(crDefault);
+end;
+
+function TCDWidgetSet.SetCursor(ACursor: HCURSOR): HCURSOR;
+begin
+  Result := BrowserCursorHandle;
+  if (ACursor = 1) and (Screen <> nil) and (Screen.RealCursor = crDefault) then
+    { Restoring the screen cursor must restore the hovered control's cursor. }
+    UpdateBrowserCursor
+  else
+    ApplyBrowserCursor(ACursor);
 end;
 
 function TCDWidgetSet.EnumFontFamiliesEx(DC: HDC; lpLogFont: PLogFont; Callback: FontEnumExProc; Lparam: LParam; Flags: dword): longint;

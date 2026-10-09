@@ -247,7 +247,7 @@ begin
     2: CallbackMouseMove(Form, X, Y, BrowserShiftState(Modifiers));
     3..5: CallbackMouseDown(Form, X, Y, MouseButton, BrowserShiftState(Modifiers), Kind-1);
   end;
-  CDWidgetSet.UpdateBrowserCursor;
+  if Kind <> 2 then CDWidgetSet.UpdateBrowserCursor;
   if Kind = 2 then
   begin
     TBrowserApplication(Application).ReleaseComponents;

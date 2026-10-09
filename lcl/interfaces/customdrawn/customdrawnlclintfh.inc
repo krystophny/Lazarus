@@ -32,7 +32,7 @@ function AskUser(const DialogCaption, DialogMessage: string; DialogType:
 function CreateEmptyRegion: hRGN; override;
 {$ifdef CD_Wasm}
 function CreateStandardCursor(ACursor: SmallInt): HCURSOR; override;
-procedure UpdateBrowserCursor;
+procedure UpdateBrowserCursor(AControl: TWinControl = nil);
 {$endif}
 (*function CreateStandardCursor(ACursor: SmallInt): HCURSOR; override;
 function CreateRubberBand(const ARect: TRect; const ABrush: HBrush = 0): HWND; override;
