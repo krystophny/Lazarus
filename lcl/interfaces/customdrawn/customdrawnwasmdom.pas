@@ -53,7 +53,7 @@ type
     Element, CaptionElement, Root: IJSObject;
     SyncedStyle, SyncedText, SyncedLabel: String;
     SyncedStart, SyncedFinish: Integer;
-    SyncedEnabled, SyncedReadOnly, Initialized, Updating: Boolean;
+    SyncedEnabled, SyncedReadOnly, Initialized, Updating, Hidden: Boolean;
     SyncedMaxLength: Integer;
     procedure Activate;
     procedure Sync;
@@ -133,6 +133,18 @@ procedure TDOMControl.Sync;
 var Style: IJSObject; Position: TPoint; Value, NewStyle, Display, LabelText: String; Start, Finish, FontSize: Integer; Edit: TCustomEdit;
 begin
   if Updating or (GetCurrentForm = nil) or not Control.HandleAllocated then Exit;
+  if not Control.IsVisible or (GetParentForm(Control) <> GetCurrentForm.LCLForm) then
+  begin
+    if not Hidden then
+    begin
+      Style := Root.ReadJSPropertyObject('style', TJSObject) as IJSObject;
+      Style.WriteJSPropertyUTF8String('display', 'none');
+      Hidden := True;
+      SyncedStyle := '';
+    end;
+    Exit;
+  end;
+  Hidden := False;
   if Control is TCustomLabeledEdit then LabelText := TCustomLabeledEdit(Control).EditLabel.Caption
   else if Control.Hint <> '' then LabelText := Control.Hint
   else LabelText := 'Edit text';
@@ -143,8 +155,7 @@ begin
   end;
   Position := FindControlPositionRelativeToTheForm(Control);
   FontSize := Max(13, Abs(Control.Font.Height));
-  if Control.IsVisible and (GetParentForm(Control) = GetCurrentForm.LCLForm) then Display := ''
-  else Display := 'none';
+  Display := '';
   NewStyle := Format('%d,%d,%d,%d,%d,%s', [Position.X, Position.Y, Control.Width, Control.Height, FontSize, Display]);
   if not Initialized or (NewStyle <> SyncedStyle) then
   begin
