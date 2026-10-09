@@ -36,7 +36,7 @@ begin
     Result := 0;
 end;
 
-procedure TCDWidgetSet.UpdateBrowserCursor;
+procedure TCDWidgetSet.UpdateBrowserCursor(AControl: TWinControl);
 var
   Form: TCDNonNativeForm;
   Control: TWinControl;
@@ -46,10 +46,11 @@ begin
   if (Form = nil) or (Screen = nil) then Exit;
   if Screen.RealCursor <> crDefault then
   begin
-    SetCursor(Screen.Cursors[Screen.RealCursor]);
+    ApplyBrowserCursor(Screen.Cursors[Screen.RealCursor]);
     Exit;
   end;
-  Control := Form.LastMouseDownControl;
+  Control := AControl;
+  if Control = nil then Control := Form.LastMouseDownControl;
   if Control = nil then
     Control := FindControlWhichReceivedEvent(Form.LCLForm, Form.Children,
       BrowserMouse.X, BrowserMouse.Y);
@@ -60,12 +61,12 @@ begin
       Cursor := HCURSOR(TCDBaseControl(Control.Handle).Props['BrowserCursor']);
     if Cursor > 1 then
     begin
-      SetCursor(Cursor);
+      ApplyBrowserCursor(Cursor);
       Exit;
     end;
     Control := Control.Parent;
   end;
-  SetCursor(Screen.Cursors[crDefault]);
+  ApplyBrowserCursor(Screen.Cursors[crDefault]);
 end;
 
 procedure TCDWidgetSet.HideVirtualKeyboard();
