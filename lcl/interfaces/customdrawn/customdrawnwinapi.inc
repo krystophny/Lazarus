@@ -5721,6 +5721,13 @@ begin
   LCLForm := CDForm.LCLForm;
   if LCLForm = nil then Exit;
 
+  {$ifdef CD_Wasm}
+  { The browser host renders the form's menu as accessible HTML. Creating
+    the fallback toolbar here would draw and reserve a second menu row. }
+  BrowserMenusDirty := True;
+  Exit(True);
+  {$endif}
+
   MenuBar := TToolBar(CDForm.Props[CDMainMenuBarProp]);
 
   if AMenuHandle = 0 then
