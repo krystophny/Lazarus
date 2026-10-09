@@ -132,8 +132,6 @@ const imports = {
   text: (pointer, width, height, x, y, string, length, size, color, left, top, right, bottom) => {
     if (textCanvas.width !== width) textCanvas.width = width;
     if (textCanvas.height !== height) textCanvas.height = height;
-    textContext.font = currentFont;
-    textContext.textBaseline = 'top';
     const stringValue = text(string, length);
     const metrics = measureText(stringValue);
     const c = Math.cos(fontAngle), s = Math.sin(fontAngle);
@@ -442,15 +440,15 @@ for (const [name, kind] of [['pointerdown', 0], ['mousedown', 0], ['pointerup', 
     const bounds = canvas.getBoundingClientRect();
     const x = Math.round((event.clientX-bounds.left)*canvas.width/bounds.width);
     const y = Math.round((event.clientY-bounds.top)*canvas.height/bounds.height);
-    const modifiers = Number(event.shiftKey) | Number(event.ctrlKey || event.metaKey)<<1 | Number(event.altKey)<<2 | Number(event.buttons&1)<<3;
+    const state = modifiers(event);
     if (kind === 2) {
-      pendingMove = [x, y, event.button, modifiers];
+      pendingMove = [x, y, event.button, state];
       invalidate();
       return;
     }
     flushMove(true);
     const clickKind = name === 'mousedown' && event.detail > 1 ? Math.min(event.detail, 4)+1 : kind;
-    pointer(clickKind, x, y, event.button, modifiers);
+    pointer(clickKind, x, y, event.button, state);
     if (kind === 1 && canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   });
 }
@@ -497,10 +495,9 @@ canvas.addEventListener('wheel', event => {
 
 // The form follows the window instead of the desktop size it was saved with.
 function surfaceBox() {
-  const surface = document.querySelector('#lcl-surface');
-  const left = surface.getBoundingClientRect().left;
+  const {left, top} = document.querySelector('#lcl-surface').getBoundingClientRect();
   return [Math.max(320, Math.floor(document.documentElement.clientWidth - left*2)),
-          Math.max(240, Math.floor(window.innerHeight - surface.getBoundingClientRect().top - 16))];
+          Math.max(240, Math.floor(window.innerHeight - top - 16))];
 }
 function resize() {
   if (!ready) return;
@@ -526,7 +523,6 @@ async function start() {
     ConsoleStdout.lineBuffered(line => console.error(`[Pascal] ${line}`)),
     fileSystem
   ]);
-  // FPC's generic WASI RTL imports these services even though this demo does not use them.
   const wasiImports = {...wasi.wasiImport};
   const paths=new Map(), written=new Set();
   const open=wasiImports.path_open, write=wasiImports.fd_write, close=wasiImports.fd_close;
@@ -542,16 +538,6 @@ async function start() {
     const result=close(fd);
     if (!result && written.has(fd) && downloadPaths.has(name) && file) download(name,file.data.slice());
     written.delete(fd);paths.delete(fd);return result;
-  };
-  wasiImports.random_get = (pointer, length) => {
-    const bytes = new Uint8Array(instance.exports.memory.buffer, pointer, length);
-    for (let offset=0; offset<length; offset+=65536) crypto.getRandomValues(bytes.subarray(offset, offset+65536));
-    return 0;
-  };
-  wasiImports.clock_time_get = (id, precision, pointer) => {
-    const nanoseconds = BigInt(Math.floor((id === 0 ? Date.now() : performance.now())*1e6));
-    new DataView(instance.exports.memory.buffer).setBigUint64(pointer, nanoseconds, true);
-    return 0;
   };
   const response = await fetch(moduleURL);
   if (!response.ok) throw new Error(`WASM download failed (${response.status})`);
