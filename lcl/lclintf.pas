@@ -54,7 +54,7 @@ uses
   // LCL
   LCLType, LMessages, LCLStrConsts, InterfaceBase,
   // LazUtils
-  GraphType, GraphMath, FileUtil, LazFileUtils, UTF8Process, LazUTF8,
+  GraphType, GraphMath, FileUtil, LazFileUtils, {$IFNDEF WASI}UTF8Process,{$ENDIF} LazUTF8,
   LazSysUtils, LazLoggerBase, Maps;
 
 {$ifdef Trace}
@@ -221,6 +221,9 @@ end;
 // System APIs which have an operating-system specific implementation
 // They should be moved to FPC eventually
 {$I sysenvapis.inc}
+{$IFDEF WASI}
+  {$I sysenvapis_wasi.inc}
+{$ENDIF}
 {$IFDEF Windows}
   {$I sysenvapis_win.inc}
 {$ENDIF}

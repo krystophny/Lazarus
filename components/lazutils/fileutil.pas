@@ -228,6 +228,7 @@ const
 
 implementation
 
+{$IFNDEF WASI}
 uses
 {$IFDEF windows}
   Windows;
@@ -237,6 +238,7 @@ uses
   {$ELSE}
   Unix, BaseUnix;
   {$ENDIF}
+{$ENDIF}
 {$ENDIF}
 
 {$I fileutil.inc}
