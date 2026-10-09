@@ -1940,11 +1940,7 @@ end;
 procedure TCDEdit.DoEnter;
 begin
   {$IF DEFINED(WASM32) OR DEFINED(WASI)}
-  { The browser backend composes and uploads the whole window surface for every
-    invalidate, so a 500 ms caret blink would move ~3.4 MB per blink forever and
-    keep an otherwise idle tab busy. Native backends repaint only the caret rect.
-    The caret is therefore shown steadily in the browser; text editing, selection
-    and cursor movement are unaffected. } 
+  // Keep idle browser windows free of caret-timer repaints.
   FCaretTimer.Enabled := False;
   {$ELSE}
   FCaretTimer.Enabled := True;
