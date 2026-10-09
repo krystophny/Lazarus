@@ -40,7 +40,8 @@ end;
 
 function TCDWidgetSet.ClipboardGetData(ClipboardType: TClipboardType;
   FormatID: TClipboardFormat; Stream: TStream): Boolean;
-var I: Integer;
+var
+  I: Integer;
 begin
   Result := False;
   if (Stream = nil) or not Assigned(BrowserClipboardRequest[ClipboardType]) then Exit;
@@ -55,7 +56,8 @@ end;
 function TCDWidgetSet.ClipboardGetOwnerShip(ClipboardType: TClipboardType;
   OnRequestProc: TClipboardRequestEvent; FormatCount: Integer;
   Formats: PClipboardFormat): Boolean;
-var I: Integer;
+var
+  I: Integer;
 begin
   BrowserClipboardRequest[ClipboardType] := OnRequestProc;
   SetLength(BrowserClipboardFormats[ClipboardType], FormatCount);
@@ -224,7 +226,11 @@ var
 begin
   Control := BrowserControl(Handle);
   Result := Control <> nil;
-  if Result then begin Left := Control.Left; Top := Control.Top; end;
+  if Result then
+  begin
+    Left := Control.Left;
+    Top := Control.Top;
+  end;
 end;
 
 function TCDWidgetSet.BackendGetWindowSize(Handle: hwnd; var Width, Height: integer): boolean;
@@ -233,7 +239,11 @@ var
 begin
   Control := BrowserControl(Handle);
   Result := Control <> nil;
-  if Result then begin Width := Control.Width; Height := Control.Height; end;
+  if Result then
+  begin
+    Width := Control.Width;
+    Height := Control.Height;
+  end;
 end;
 
 function TCDWidgetSet.BackendInvalidateRect(aHandle: HWND; Rect: pRect; bErase: Boolean): Boolean;

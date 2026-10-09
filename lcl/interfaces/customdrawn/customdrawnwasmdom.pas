@@ -67,7 +67,8 @@ var
   LastDOMFocus: TWinControl;
 
 function FindEntry(Control: TWinControl): TDOMControl;
-var I: Integer;
+var
+  I: Integer;
 begin
   Result := nil;
   if Entries = nil then Exit;
@@ -76,7 +77,8 @@ begin
 end;
 
 procedure DispatchBrowserDOMControl(Handle: PtrUInt);
-var I: Integer;
+var
+  I: Integer;
 begin
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do
@@ -88,7 +90,8 @@ begin
 end;
 
 procedure FocusBrowserDOMControl(Handle: PtrUInt);
-var I: Integer;
+var
+  I: Integer;
 begin
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do
@@ -101,7 +104,9 @@ begin
 end;
 
 procedure TDOMControl.Activate;
-var Value, Prefix: String; Start, Finish: Integer;
+var
+  Value, Prefix: String;
+  Start, Finish: Integer;
 begin
   if not Control.Enabled then Exit;
   { LM_CHANGED retrieves the browser state through RetrieveState. }
@@ -130,7 +135,12 @@ begin
 end;
 
 procedure TDOMControl.Sync;
-var Style: IJSObject; Position: TPoint; Value, NewStyle, Display, LabelText: String; Start, Finish, FontSize: Integer; Edit: TCustomEdit;
+var
+  Style: IJSObject;
+  Position: TPoint;
+  Value, NewStyle, Display, LabelText: String;
+  Start, Finish, FontSize: Integer;
+  Edit: TCustomEdit;
 begin
   if Updating or (GetCurrentForm = nil) or not Control.HandleAllocated then Exit;
   if not Control.IsVisible or (GetParentForm(Control) <> GetCurrentForm.LCLForm) then
@@ -222,7 +232,10 @@ end;
 
 function CreateDOMControl(Control: TWinControl; const Params: TCreateParams;
   CheckBox: Boolean): TLCLHandle;
-var Entry: TDOMControl; Style: IJSObject; ID: String;
+var
+  Entry: TDOMControl;
+  Style: IJSObject;
+  ID: String;
 begin
   if Control is TCustomEdit then Result := TCDWSCustomEdit.CreateHandle(Control, Params)
   else Result := TCDWSWinControl.CreateHandle(Control, Params);
@@ -272,7 +285,8 @@ begin
 end;
 
 procedure DestroyDOMControl(Control: TWinControl);
-var Entry: TDOMControl;
+var
+  Entry: TDOMControl;
 begin
   Entry := FindEntry(Control);
   if Entry = nil then Exit;
@@ -283,64 +297,149 @@ begin
 end;
 
 procedure SyncBrowserDOM;
-var I: Integer;
+var
+  I: Integer;
 begin
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do TDOMControl(Entries[I]).Sync;
 end;
 
 class function TBrowserWSEdit.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;
-begin Result := CreateDOMControl(Control, Params, False); end;
+begin
+  Result := CreateDOMControl(Control, Params, False);
+end;
+
 class procedure TBrowserWSEdit.DestroyHandle(const Control: TWinControl);
-begin DestroyDOMControl(Control); end;
+begin
+  DestroyDOMControl(Control);
+end;
+
 class procedure TBrowserWSEdit.SetText(const Control: TWinControl; const Text: String);
-begin inherited SetText(Control, Text); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  inherited SetText(Control, Text);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class procedure TBrowserWSEdit.SetSelStart(const Control: TCustomEdit; NewStart: Integer);
-begin inherited SetSelStart(Control, NewStart); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  inherited SetSelStart(Control, NewStart);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class procedure TBrowserWSEdit.SetSelLength(const Control: TCustomEdit; NewLength: Integer);
-begin inherited SetSelLength(Control, NewLength); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  inherited SetSelLength(Control, NewLength);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class function TBrowserWSMemo.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;
-begin Result := CreateDOMControl(Control, Params, False); end;
+begin
+  Result := CreateDOMControl(Control, Params, False);
+end;
+
 class procedure TBrowserWSMemo.DestroyHandle(const Control: TWinControl);
-begin DestroyDOMControl(Control); end;
+begin
+  DestroyDOMControl(Control);
+end;
+
 class function TBrowserWSMemo.GetStrings(const Control: TCustomMemo): TStrings;
-begin Result := TCDIntfEdit(TCDWinControl(Control.Handle).CDControl).Lines; end;
+begin
+  Result := TCDIntfEdit(TCDWinControl(Control.Handle).CDControl).Lines;
+end;
+
 class procedure TBrowserWSMemo.FreeStrings(var Strings: TStrings);
-begin Strings := nil; end;
+begin
+  Strings := nil;
+end;
+
 class procedure TBrowserWSMemo.AppendText(const Control: TCustomMemo; const Text: String);
-begin TBrowserWSEdit.SetText(Control, Control.Text + Text); end;
+begin
+  TBrowserWSEdit.SetText(Control, Control.Text + Text);
+end;
 
 class function TBrowserWSButton.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;
-begin Result := CreateDOMControl(Control, Params, False); end;
+begin
+  Result := CreateDOMControl(Control, Params, False);
+end;
+
 class procedure TBrowserWSButton.DestroyHandle(const Control: TWinControl);
-begin DestroyDOMControl(Control); end;
+begin
+  DestroyDOMControl(Control);
+end;
+
 class procedure TBrowserWSButton.SetBounds(const Control: TWinControl; const X, Y, Width, Height: Integer);
-begin TCDWSWinControl.SetBounds(Control, X, Y, Width, Height); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  TCDWSWinControl.SetBounds(Control, X, Y, Width, Height);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class procedure TBrowserWSButton.ShowHide(const Control: TWinControl);
-begin TCDWSWinControl.ShowHide(Control); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  TCDWSWinControl.ShowHide(Control);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class procedure TBrowserWSButton.SetText(const Control: TWinControl; const Text: String);
-begin if FindEntry(Control) <> nil then FindEntry(Control).CaptionElement.WriteJSPropertyUTF8String('textContent', Text); end;
+begin
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).CaptionElement.WriteJSPropertyUTF8String('textContent', Text);
+end;
+
 class function TBrowserWSButton.GetText(const Control: TWinControl; var Text: String): Boolean;
-begin Result := FindEntry(Control) <> nil; if Result then Text := FindEntry(Control).CaptionElement.ReadJSPropertyUTF8String('textContent'); end;
+begin
+  Result := FindEntry(Control) <> nil;
+  if Result then
+    Text := FindEntry(Control).CaptionElement.ReadJSPropertyUTF8String('textContent');
+end;
 
 class function TBrowserWSCheckBox.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;
-begin Result := CreateDOMControl(Control, Params, True); end;
+begin
+  Result := CreateDOMControl(Control, Params, True);
+end;
+
 class procedure TBrowserWSCheckBox.DestroyHandle(const Control: TWinControl);
-begin DestroyDOMControl(Control); end;
+begin
+  DestroyDOMControl(Control);
+end;
+
 class procedure TBrowserWSCheckBox.SetBounds(const Control: TWinControl; const X, Y, Width, Height: Integer);
-begin TCDWSWinControl.SetBounds(Control, X, Y, Width, Height); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  TCDWSWinControl.SetBounds(Control, X, Y, Width, Height);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class procedure TBrowserWSCheckBox.ShowHide(const Control: TWinControl);
-begin TCDWSWinControl.ShowHide(Control); if FindEntry(Control) <> nil then FindEntry(Control).Sync; end;
+begin
+  TCDWSWinControl.ShowHide(Control);
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).Sync;
+end;
+
 class procedure TBrowserWSCheckBox.SetText(const Control: TWinControl; const Text: String);
-begin if FindEntry(Control) <> nil then FindEntry(Control).CaptionElement.WriteJSPropertyUTF8String('textContent', Text); end;
+begin
+  if FindEntry(Control) <> nil then
+    FindEntry(Control).CaptionElement.WriteJSPropertyUTF8String('textContent', Text);
+end;
+
 class function TBrowserWSCheckBox.GetText(const Control: TWinControl; var Text: String): Boolean;
-begin Result := FindEntry(Control) <> nil; if Result then Text := FindEntry(Control).CaptionElement.ReadJSPropertyUTF8String('textContent'); end;
+begin
+  Result := FindEntry(Control) <> nil;
+  if Result then
+    Text := FindEntry(Control).CaptionElement.ReadJSPropertyUTF8String('textContent');
+end;
 
 class function TBrowserWSCheckBox.RetrieveState(const Control: TCustomCheckBox): TCheckBoxState;
 begin
   if (FindEntry(Control) <> nil) and FindEntry(Control).Element.ReadJSPropertyBoolean('checked') then Result := cbChecked
   else Result := cbUnchecked;
 end;
+
 class procedure TBrowserWSCheckBox.SetState(const Control: TCustomCheckBox; const State: TCheckBoxState);
 begin
   if FindEntry(Control) = nil then Exit;
