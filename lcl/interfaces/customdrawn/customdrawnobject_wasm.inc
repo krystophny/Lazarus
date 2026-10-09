@@ -49,23 +49,6 @@ begin
   if (Mask and 8) <> 0 then Include(Result, ssLeft);
 end;
 
-{ One Unicode scalar as UTF-8, without pulling a codepage converter into the
-  browser target. }
-function BrowserUtf8(CodePoint: LongInt): TUTF8Char;
-begin
-  Result := '';
-  if CodePoint < $80 then
-    Result := Chr(CodePoint)
-  else if CodePoint < $800 then
-    Result := Chr($C0 or (CodePoint shr 6)) + Chr($80 or (CodePoint and $3F))
-  else if CodePoint < $10000 then
-    Result := Chr($E0 or (CodePoint shr 12)) + Chr($80 or ((CodePoint shr 6) and $3F)) +
-      Chr($80 or (CodePoint and $3F))
-  else if CodePoint < $110000 then
-    Result := Chr($F0 or (CodePoint shr 18)) + Chr($80 or ((CodePoint shr 12) and $3F)) +
-      Chr($80 or ((CodePoint shr 6) and $3F)) + Chr($80 or (CodePoint and $3F));
-end;
-
 { Browser events arrive as separate callbacks without a native message loop.
   Run the idle work TApplication.HandleMessage performs after each message:
   queued async calls, released components, OnIdle and action updates. }
@@ -269,7 +252,7 @@ begin
   case Kind of
     0: CallbackKeyDown(Form, Word(Key));
     1: CallbackKeyUp(Form, Word(Key));
-    2: CallbackKeyChar(Form, Word(Key), BrowserUtf8(CharCode));
+    2: CallbackKeyChar(Form, Word(Key), UnicodeToUTF8(CharCode));
   end;
   LCLWasmIdle;
 end;
@@ -287,14 +270,11 @@ begin
 end;
 
 procedure LCLWasmResize(Width, Height: LongInt); cdecl;
-var
-  Form: TCDNonNativeForm;
 begin
   BrowserWidth := Max(1, Width);
   BrowserHeight := Max(1, Height);
   BrowserDirty := True;
   BrowserFullDamage := True;
-  Form := GetCurrentForm;
   if Application.MainForm <> nil then
     Application.MainForm.SetBounds(0, 0, BrowserWidth, BrowserHeight);
   LCLWasmIdle;
