@@ -1,6 +1,7 @@
 {$ifdef CPUWASM32}
   {$define CD_Wasm}
   {$define CD_UseNativeText}
+  {$define CD_HasNativeSelectItemDialog}
 {$endif}
 
 

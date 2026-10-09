@@ -342,11 +342,16 @@ type
     FItems: TStrings;
     FKeyboardInputBehavior: TKeyboardInputBehavior;
     function GetItems: TStrings;
+    {$ifndef CPUWASM32}
     procedure ShowSelectItemDialogResult(ASelectedItem: Integer);
+    {$endif}
     procedure SetItemIndex(AValue: Integer);
     procedure SetItems(AValue: TStrings);
     procedure SetKeyboardInputBehavior(AValue: TKeyboardInputBehavior);
   protected
+    {$ifdef CPUWASM32}
+    procedure ShowSelectItemDialogResult(ASelectedItem: Integer); virtual;
+    {$endif}
     function GetControlId: TCDControlID; override;
     // mouse
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
