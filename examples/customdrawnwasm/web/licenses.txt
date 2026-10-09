@@ -7,7 +7,7 @@ License texts: source/fpc-COPYING.FPC and source/fpc-COPYING.txt
 
 Pas2JS runtime, JOB browser implementation and environment: modified LGPL with linking exception. Base source: https://gitlab.com/freepascal.org/fpc/pas2js/-/tree/fa10c59214cd226c60af465c831d66a7321f0214
 The fixed JOB browser source is supplied at source/job_browser.pp.
-Fix commit: https://gitlab.com/krystophny/pas2js/-/commit/b69f26b05baeacb0e2da29df3e33d21b28fbe277
+Fix commit: https://github.com/krystophny/pas2js/commit/dad0f277fdeaca1b1e8c6f2866de5f54ec12e703
 Upstream MR: https://gitlab.com/freepascal.org/fpc/pas2js/-/merge_requests/103
 License texts: source/pas2js-LICENSE and source/pas2js-COPYING.txt
 
