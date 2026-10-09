@@ -5,7 +5,7 @@ import json
 from playwright.sync_api import sync_playwright
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--url', default='http://127.0.0.1:8765/lcl.html')
+parser.add_argument('--url', default='http://127.0.0.1:8765/')
 parser.add_argument('--chromium', default='/usr/bin/chromium')
 args = parser.parse_args()
 with sync_playwright() as p:

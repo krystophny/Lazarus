@@ -62,6 +62,24 @@ const imports = {
       pixels[i+3] = Math.round(layer[i+2]*alpha + pixels[i+3]*(1-alpha));
     }
   },
+  // A browser has no modal native dialog. The widgetset forwards MessageBox text
+  // here so an application can report something instead of raising and dying.
+  message: (textPtr, captionPtr, textLen, captionLen, flags) => {
+    const mem = new Uint8Array(instance.exports.memory.buffer);
+    const read = (ptr, len) => new TextDecoder().decode(mem.subarray(ptr, ptr + len));
+    const text = read(textPtr, textLen), caption = read(captionPtr, captionLen);
+    let el = document.querySelector('#notice');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'notice';
+      el.setAttribute('role', 'status');
+      el.innerHTML = '<span id="notice-text"></span><button id="notice-close" type="button">OK</button>';
+      document.body.appendChild(el);
+      el.querySelector('#notice-close').addEventListener('click', () => { el.hidden = true; });
+    }
+    el.querySelector('#notice-text').textContent = caption ? `${caption}: ${text}` : text;
+    el.hidden = false;
+  },
   present: (pointer, width, height) => {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
