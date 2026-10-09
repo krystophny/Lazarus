@@ -259,7 +259,10 @@ function commonDialog(options) {
     if (type==='checkbox') input.checked=Boolean(value); else input.value=value ?? '';
     row.append(input); form.append(row); fields[name]=input; return input;
   }
-  if (options.kind==='open') field('file', 'Choose file', 'file').multiple = Boolean(options.multiple);
+  if (options.kind==='open') {
+    field('file', 'Choose file', 'file').multiple = Boolean(options.multiple);
+    field('related', 'Related files (optional)', 'file').multiple = true;
+  }
   if (options.kind==='save') field('filename', 'File name', 'text', options.filename || 'drawing.tpx');
   if (options.kind==='open' || options.kind==='save') {
     const label=document.createElement('label'); label.textContent='File type ';
@@ -295,7 +298,7 @@ function commonDialog(options) {
       let result;
       if (options.kind==='open') {
         const files=Array.from(fields.file.files); if (!files.length) return;
-        for (const file of files) {
+        for (const file of [...Array.from(fields.related.files), ...files]) {
           fileSystem.dir.contents.set(file.name, new File(new Uint8Array(await file.arrayBuffer())));
           downloadPaths.add(file.name);
         }
