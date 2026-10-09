@@ -78,6 +78,9 @@ type
                                       const AOldPos, ANewPos: Integer;
                                       const AChildren: TFPList); override;
     class procedure SetColor(const AWinControl: TWinControl); override;
+    {$ifdef CD_Wasm}
+    class procedure SetCursor(const AWinControl: TWinControl; const ACursor: HCURSOR); override;
+    {$endif}
     class procedure SetFont(const AWinControl: TWinControl; const AFont: TFont); override;
     class procedure SetText(const AWinControl: TWinControl; const AText: string); override;
 
@@ -150,6 +153,16 @@ uses
   customdrawn_cocoaproc,
   {$endif}
   customdrawnwsforms;
+
+{$ifdef CD_Wasm}
+class procedure TCDWSWinControl.SetCursor(const AWinControl: TWinControl;
+  const ACursor: HCURSOR);
+begin
+  if not AWinControl.HandleAllocated then Exit;
+  TCDBaseControl(AWinControl.Handle).Props['BrowserCursor'] := Pointer(ACursor);
+  CDWidgetSet.UpdateBrowserCursor;
+end;
+{$endif}
 
 { TCDWSLazAccessibleObject }
 
