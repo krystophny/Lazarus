@@ -177,6 +177,7 @@ begin
   Brush.Free;
   Pen.Free;
   Font.Free;
+  ClipRegion.Free;
   inherited Destroy;
 end;
 
@@ -595,6 +596,23 @@ begin
   lState.BaseWindowOrg := BaseWindowOrg;
   lState.WindowOrg := WindowOrg;
   lState.Clipping := Clipping;
+  if ClipRegion is TLazRegion then
+  begin
+    if ClipRegion is TLazRegionWithChilds then
+    begin
+      lState.ClipRegion := TLazRegionWithChilds.Create;
+      TLazRegionWithChilds(lState.ClipRegion).Childs.Assign(TLazRegionWithChilds(ClipRegion).Childs);
+      TLazRegionWithChilds(lState.ClipRegion).Parent := TLazRegionWithChilds(ClipRegion).Parent;
+      TLazRegionWithChilds(lState.ClipRegion).UserData := TLazRegionWithChilds(ClipRegion).UserData;
+    end
+    else lState.ClipRegion := TLazRegion.Create;
+    TLazRegion(lState.ClipRegion).Assign(TLazRegion(ClipRegion));
+  end
+  else if ClipRegion is TFPRectRegion then
+  begin
+    lState.ClipRegion := TFPRectRegion.Create;
+    TFPRectRegion(lState.ClipRegion).Rect := TFPRectRegion(ClipRegion).Rect;
+  end;
 
   Result := GraphicStateList.Add(lState);
 end;
@@ -615,6 +633,9 @@ begin
   AssignFontData(lState.Font);
   BaseWindowOrg := lState.BaseWindowOrg;
   WindowOrg := lState.WindowOrg;
+  FreeAndNil(FClipRegion);
+  ClipRegion := lState.ClipRegion;
+  lState.ClipRegion := nil;
   Clipping := lState.Clipping;
 
   lState.Free;
@@ -798,7 +819,7 @@ begin
 
   {$ifdef lazcanvas_new_fast_copy}
   // If the formats match, make a fast copy of the data itself, without pixel conversion
-  if (ASource is TLazCanvas) and
+  if not Clipping and (ASource is TLazCanvas) and
      (Image is TLazIntfImage) and (ALazSource.Image is TLazIntfImage) and
      (ImageFormat in [clfRGB24, clfRGB24UpsideDown, clfBGR24, clfBGRA32, clfRGBA32, clfARGB32]) and
      (ImageFormat = ALazSource.ImageFormat) then
