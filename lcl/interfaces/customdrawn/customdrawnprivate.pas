@@ -165,17 +165,20 @@ type
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 procedure CallbackMouseMove(AWindowHandle: TCDForm; x, y: Integer; ShiftState: TShiftState = []);
+{$ifdef CPUWASM32}
 procedure CallbackMouseLeave(AWindowHandle: TCDForm);
+procedure ForgetBrowserControl(AControl: TWinControl);
+{$endif}
 procedure CallbackKeyDown(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyUp(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyChar(AWindowHandle: TCDForm; AKeyData: Word; AChar: TUTF8Char);
-procedure ForgetBrowserControl(AControl: TWinControl);
 function IsIntfControl(AControl: TWinControl): Boolean;
 
 implementation
 
 uses customdrawnint, LCLMessageGlue, customdrawndrawers, Clipbrd;
 
+{$ifdef CPUWASM32}
 var
   BrowserMouseTarget: TWinControl = nil;
 
@@ -183,6 +186,7 @@ procedure ForgetBrowserControl(AControl: TWinControl);
 begin
   if BrowserMouseTarget = AControl then BrowserMouseTarget := nil;
 end;
+{$endif}
 
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 var
@@ -241,10 +245,8 @@ begin
   Result := (AControl is TToolBar) or (AControl is TPanel) or (AControl is TStatusBar);
 end;
 
-{ Deliver a pointer leave for the control that last received a move. Native
-  widgetsets get WM_MOUSELEAVE from the window system; without an equivalent the
-  application can never erase a cursor it painted directly, so the crosshair
-  stayed on the paper after the pointer had left the window. }
+{$ifdef CPUWASM32}
+{ Native backends manage pointer tracking through their window system. }
 procedure BrowserFireMouseLeave;
 begin
   if (BrowserMouseTarget = nil) or not BrowserMouseTarget.HandleAllocated then Exit;
@@ -257,13 +259,10 @@ end;
 procedure CallbackMouseLeave(AWindowHandle: TCDForm);
 begin
   BrowserFireMouseLeave;
-  { HWND() of the CD form, as in the scrolling path above. HWND(LCLForm) is a
-    TCustomForm object pointer, and BrowserControl would cast it to
-    TCDBaseControl - a virtual call on the wrong vtable, which traps the wasm
-    instance with "function signature mismatch" and kills all later input. }
   if AWindowHandle <> nil then
     LCLIntf.InvalidateRect(HWND(AWindowHandle), nil, False);
 end;
+{$endif}
 
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 var
@@ -356,32 +355,17 @@ begin
 
   lEventPos := FormPosToControlPos(lTarget, x, y);
   LCLSendMouseMoveMsg(lTarget, lEventPos.x, lEventPos.y, ShiftState);
-  { Applications such as TpX paint their crosshair cursor straight onto the
-    control canvas inside MouseMove. On native widgetsets that writing goes
-    directly to the window; in the browser the frame is composed from the
-    control image, so a move that only painted has to invalidate the surface or
-    the cursor never follows the pointer. Chrome controls are excluded to keep
-    hovering over panels and toolbars free of repaints. }
-  { Track the hovered control the way a native window system does: entering a
-    control sets FMouseInClient, leaving clears it. Without the enter message
-    TControl.CMMouseLeave exits early, so an application could never erase a
-    crosshair it had painted and the cursor stayed on screen forever. }
+  {$ifdef CPUWASM32}
+  { CM_MOUSEENTER establishes the state needed by CMMouseLeave. }
   if lTarget <> BrowserMouseTarget then
   begin
     BrowserFireMouseLeave;
     BrowserMouseTarget := lTarget;
     if lTarget.HandleAllocated then
       lTarget.Perform(CM_MOUSEENTER, WParam(0), LParam(0));
-    {$ifdef CPUWASM32}
-    { Cursor changes already update immediately through SetCursor. Only a
-      new hover target needs inherited-cursor resolution; reuse this hit test. }
     CDWidgetSet.UpdateBrowserCursor(lTarget);
-    {$endif}
   end;
-  { No blanket invalidate here. Applications such as TpX already invalidate the
-    union of the old and new cursor lines from MouseMove with a precise rect; a
-    nil rect here would turn every pointer move into a full-surface recompose and
-    upload (measured 43% of a core instead of 2%). }
+  {$endif}
 
   // If this is a interface control, send the message to the main LCL control too
   if IsIntfControl(lTarget) then
