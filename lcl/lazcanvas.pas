@@ -101,6 +101,8 @@ type
     function GetAssignedFont: TFPCustomFont;
     function GetWindowOrg: TPoint;
     procedure SetWindowOrg(AValue: TPoint);
+    function FastCanvasCopyRect(ASource: TFPCustomCanvas; const ADestX, ADestY,
+      ASourceX, ASourceY, ADrawWidth, ADrawHeight: Integer): Boolean;
   protected
     procedure SetColor (x,y:integer; const AValue:TFPColor); override;
     function DoCreateDefaultFont : TFPCustomFont; override;
@@ -137,8 +139,6 @@ type
     procedure AlphaBlend_Image(ASource: TFPCustomImage;
       const ADestX, ADestY, ASourceX, ASourceY, ASourceWidth, ASourceHeight: Integer);
     procedure DoDrawImage(x,y:integer; const AImage: TFPCustomImage);
-    function FastCanvasCopyRect(ASource: TFPCustomCanvas; const ADestX, ADestY,
-      ASourceX, ASourceY, ADrawWidth, ADrawHeight: Integer): Boolean;
     procedure CanvasCopyRect(ASource: TFPCustomCanvas;
       const ADestX, ADestY, ASourceX, ASourceY, ASourceWidth, ASourceHeight: Integer);
     // Fills the entire drawing with a color
@@ -327,7 +327,8 @@ begin
     Exit;
   end;
 
-  if Clipping and (ClipRegion <> nil) then
+  if Clipping and (ClipRegion is TLazRegion)
+    and TLazRegion(ClipRegion).IsSimpleRectRegion then
   begin
     with ClipRegion.GetBoundingRect do
     begin
@@ -347,14 +348,14 @@ begin
     with Intf.DataDescription do
       if (Format = ricfRGBA) and (BitsPerPixel = 32) and (MaskBitsPerPixel = 0)
         and (RedPrec = 8) and (GreenPrec = 8) and (BluePrec = 8)
-        and (AlphaPrec in [0, 8]) and (ByteOrder = riboLSBFirst)
+        and (AlphaPrec = 8) and (PaletteColorCount = 0)
+        and (BitOrder = riboBitsInOrder) and (ByteOrder = DefaultByteOrder)
         and (LineOrder = riloTopToBottom) then
       begin
         Value := (LongWord(Brush.FPColor.Red shr 8) shl RedShift)
           or (LongWord(Brush.FPColor.Green shr 8) shl GreenShift)
-          or (LongWord(Brush.FPColor.Blue shr 8) shl BlueShift);
-        if AlphaPrec = 8 then
-          Value := Value or (LongWord(Brush.FPColor.Alpha shr 8) shl AlphaShift);
+          or (LongWord(Brush.FPColor.Blue shr 8) shl BlueShift)
+          or (LongWord(Brush.FPColor.Alpha shr 8) shl AlphaShift);
         Inc(b.Left, FWindowOrg.X);
         Inc(b.Right, FWindowOrg.X);
         Inc(b.Top, FWindowOrg.Y);
@@ -679,6 +680,11 @@ begin
     end
     else lState.ClipRegion := TLazRegion.Create;
     TLazRegion(lState.ClipRegion).Assign(TLazRegion(ClipRegion));
+  end
+  else if ClipRegion is TFPRectRegion then
+  begin
+    lState.ClipRegion := TFPRectRegion.Create;
+    TFPRectRegion(lState.ClipRegion).Rect := TFPRectRegion(ClipRegion).Rect;
   end;
 
   Result := GraphicStateList.Add(lState);
@@ -700,6 +706,7 @@ begin
   AssignFontData(lState.Font);
   BaseWindowOrg := lState.BaseWindowOrg;
   WindowOrg := lState.WindowOrg;
+  FreeAndNil(FClipRegion);
   ClipRegion := lState.ClipRegion;
   lState.ClipRegion := nil;
   Clipping := lState.Clipping;
@@ -876,8 +883,14 @@ begin
   if not (TFPImageCanvas(ASource).Image is TLazIntfImage) then Exit;
   SrcImage := TLazIntfImage(TFPImageCanvas(ASource).Image);
   DestImage := TLazIntfImage(Image);
+  // Preserve the pixel loop's read-after-write behavior for aliased images.
+  if (PtrUInt(SrcImage.PixelData) < PtrUInt(DestImage.PixelData)
+      + DestImage.DataDescription.BytesPerLine * DestImage.Height)
+    and (PtrUInt(DestImage.PixelData) < PtrUInt(SrcImage.PixelData)
+      + SrcImage.DataDescription.BytesPerLine * SrcImage.Height) then Exit;
   with SrcImage.DataDescription do
     if (Format <> ricfRGBA) or (BitsPerPixel <> 32) or (LineOrder <> riloTopToBottom)
+      or (MaskBitsPerPixel <> 0) or (PaletteColorCount <> 0)
       or (RedPrec <> 8) or (GreenPrec <> 8) or (BluePrec <> 8)
       or (RedShift <> DestImage.DataDescription.RedShift)
       or (GreenShift <> DestImage.DataDescription.GreenShift)
@@ -886,10 +899,13 @@ begin
       or (BitOrder <> DestImage.DataDescription.BitOrder) then Exit;
   with DestImage.DataDescription do
     if (Format <> ricfRGBA) or (BitsPerPixel <> 32) or (LineOrder <> riloTopToBottom)
+      or (MaskBitsPerPixel <> 0) or (PaletteColorCount <> 0)
       or (RedPrec <> 8) or (GreenPrec <> 8) or (BluePrec <> 8)
-      or not (AlphaPrec in [0, 8]) then Exit;
+      or (AlphaPrec <> 8) or (AlphaShift mod 8 <> 0)
+      or (AlphaShift > 24) then Exit;
   if (SrcImage.DataDescription.AlphaPrec <> 0) and
-    (SrcImage.DataDescription.AlphaPrec <> DestImage.DataDescription.AlphaPrec) then Exit;
+    ((SrcImage.DataDescription.AlphaPrec <> 8) or
+     (SrcImage.DataDescription.AlphaShift <> DestImage.DataDescription.AlphaShift)) then Exit;
   // Source pixels outside the source image would be written as transparent.
   if (ASourceX < 0) or (ASourceY < 0) or (ASourceX + ADrawWidth > SrcImage.Width)
     or (ASourceY + ADrawHeight > SrcImage.Height) then Exit;
@@ -908,7 +924,7 @@ begin
   X1 := Min(ADrawWidth, Clip.Right - ADestX - FWindowOrg.X);
   Count := X1 - X0;
   AlphaByte := -1;
-  if (SrcImage.DataDescription.AlphaPrec = 0) and (DestImage.DataDescription.AlphaPrec = 8) then
+  if SrcImage.DataDescription.AlphaPrec = 0 then
   begin
     AlphaByte := DestImage.DataDescription.AlphaShift div 8;
     if DestImage.DataDescription.ByteOrder = riboMSBFirst then AlphaByte := 3 - AlphaByte;
