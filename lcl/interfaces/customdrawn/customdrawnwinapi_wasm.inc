@@ -175,13 +175,14 @@ function TCDWidgetSet.GetTextExtentExPoint(DC: HDC; Str: PChar; Count,
   MaxWidth: Integer; MaxCount, PartialWidths: PInteger; var Size: Types.TSize
   ): Boolean;
 var
-  I, Width: Integer;
+  I, Width, FontSize: Integer;
 begin
   Result := GetTextExtentPoint(DC, Str, Count, Size);
+  FontSize := BrowserFontSize(DC);
   if MaxCount <> nil then MaxCount^ := 0;
   for I := 1 to Count do
   begin
-    Width := BrowserMeasure(Str, I, BrowserFontSize(DC));
+    Width := BrowserMeasure(Str, I, FontSize);
     if PartialWidths <> nil then PartialWidths[I-1] := Width;
     if (MaxCount <> nil) and (Width <= MaxWidth) then MaxCount^ := I;
   end;
@@ -189,20 +190,26 @@ end;
 
 function TCDWidgetSet.GetTextExtentPoint(DC: HDC; Str: PChar; Count: Integer;
   var Size: Types.TSize): Boolean;
+var
+  FontSize: Integer;
 begin
-  Size.cx := BrowserMeasure(Str, Count, BrowserFontSize(DC));
-  Size.cy := Ceil(BrowserFontSize(DC) * 1.25);
+  FontSize := BrowserFontSize(DC);
+  Size.cx := BrowserMeasure(Str, Count, FontSize);
+  Size.cy := Ceil(FontSize * 1.25);
   Result := True;
 end;
 
 function TCDWidgetSet.GetTextMetrics(DC: HDC; var TM: TTextMetric): Boolean;
+var
+  FontSize: Integer;
 begin
+  FontSize := BrowserFontSize(DC);
   FillChar(TM, SizeOf(TM), 0);
-  TM.tmHeight := Ceil(BrowserFontSize(DC) * 1.25);
-  TM.tmAscent := BrowserFontSize(DC);
+  TM.tmHeight := Ceil(FontSize * 1.25);
+  TM.tmAscent := FontSize;
   TM.tmDescent := TM.tmHeight - TM.tmAscent;
-  TM.tmAveCharWidth := BrowserMeasure('n', 1, BrowserFontSize(DC));
-  TM.tmMaxCharWidth := BrowserMeasure('W', 1, BrowserFontSize(DC));
+  TM.tmAveCharWidth := BrowserMeasure('n', 1, FontSize);
+  TM.tmMaxCharWidth := BrowserMeasure('W', 1, FontSize);
   TM.tmWeight := 400;
   TM.tmDigitizedAspectX := 96;
   TM.tmDigitizedAspectY := 96;
@@ -265,11 +272,6 @@ function TCDWidgetSet.MessageBox(hWnd: HWND; lpText, lpCaption: PChar; uType: Ca
 var
   Text, Caption: string;
 begin
-  { A raise here killed the whole instance: any application that reports an error
-    or a disabled feature (TpX does this for LaTeX, sam2p, MetaPost and printing,
-    all unavailable in a browser) died with a host-side application error instead
-    of telling the user anything. Show the text through the host and answer with
-    the button the flags ask for, so the caller's logic keeps working. }
   Text := '';
   if lpText <> nil then Text := lpText;
   Caption := '';
