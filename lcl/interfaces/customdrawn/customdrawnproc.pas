@@ -325,6 +325,7 @@ end;
 procedure RemoveBrowserForm(AForm: TCDNonNativeForm);
 begin
   if AForm = nil then Exit;
+  ForgetBrowserControl(AForm.LCLForm);
   NonNativeForms.Remove(AForm);
   if lCurrentForm = AForm then lCurrentForm := FindTopMostVisibleForm;
   AForm.Canvas.Free;
