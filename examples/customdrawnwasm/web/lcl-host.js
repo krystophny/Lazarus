@@ -21,6 +21,24 @@ const standardCursors = ['default', 'none', 'default', 'crosshair', 'text', 'def
   'w-resize', 'e-resize', 'sw-resize', 's-resize', 'se-resize'];
 const api = {};
 let image, currentFont = "13px sans-serif", fontStyle = 0, fontAngle = 0;
+// Width queries and raster drawing use the same metrics. Bound the cache because
+// pointer coordinates and edited text introduce new strings on every paint.
+const textMetrics = new Map();
+document.fonts?.addEventListener('loadingdone', () => textMetrics.clear());
+function measureText(value) {
+  textContext.font = currentFont;
+  textContext.textBaseline = 'top';
+  const key = `${currentFont}\0${value}`;
+  let metrics = textMetrics.get(key);
+  if (!metrics) {
+    metrics = textContext.measureText(value);
+    if (value.length <= 4096) {
+      if (textMetrics.size >= 256) textMetrics.delete(textMetrics.keys().next().value);
+      textMetrics.set(key, metrics);
+    }
+  }
+  return metrics;
+}
 const messageWaiters = [];
 let activeForm = 0;
 let pointerIdleTimer, lastHoverMove = 0;
@@ -109,8 +127,7 @@ const imports = {
     fontStyle = style; fontAngle = -angle * Math.PI / 1800;
   },
   measure: (pointer, length, size) => {
-    textContext.font = currentFont;
-    return Math.ceil(textContext.measureText(text(pointer, length)).width);
+    return Math.ceil(measureText(text(pointer, length)).width);
   },
   text: (pointer, width, height, x, y, string, length, size, color, left, top, right, bottom) => {
     if (textCanvas.width !== width) textCanvas.width = width;
@@ -118,7 +135,7 @@ const imports = {
     textContext.font = currentFont;
     textContext.textBaseline = 'top';
     const stringValue = text(string, length);
-    const metrics = textContext.measureText(stringValue);
+    const metrics = measureText(stringValue);
     const c = Math.cos(fontAngle), s = Math.sin(fontAngle);
     const glyphLeft = -metrics.actualBoundingBoxLeft;
     const glyphTop = -metrics.actualBoundingBoxAscent;
