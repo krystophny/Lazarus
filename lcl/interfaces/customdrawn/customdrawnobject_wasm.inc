@@ -74,6 +74,16 @@ begin
   BrowserInvalidate;
 end;
 
+procedure LCLWasmLeave; cdecl;
+var
+  Form: TCDNonNativeForm;
+begin
+  Form := GetCurrentForm;
+  if Form = nil then Exit;
+  CallbackMouseLeave(Form);
+  LCLWasmIdle;
+end;
+
 procedure LCLWasmRender; cdecl;
 var
   Form: TCDNonNativeForm;

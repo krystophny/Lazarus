@@ -161,6 +161,7 @@ type
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 procedure CallbackMouseMove(AWindowHandle: TCDForm; x, y: Integer; ShiftState: TShiftState = []);
+procedure CallbackMouseLeave(AWindowHandle: TCDForm);
 procedure CallbackKeyDown(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyUp(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyChar(AWindowHandle: TCDForm; AKeyData: Word; AChar: TUTF8Char);
@@ -169,6 +170,9 @@ function IsIntfControl(AControl: TWinControl): Boolean;
 implementation
 
 uses customdrawnint, LCLMessageGlue, customdrawndrawers, Clipbrd;
+
+var
+  BrowserMouseTarget: TWinControl = nil;
 
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 var
@@ -225,6 +229,26 @@ end;
 function IsControlBar(AControl: TWinControl): Boolean;
 begin
   Result := (AControl is TToolBar) or (AControl is TPanel) or (AControl is TStatusBar);
+end;
+
+{ Deliver a pointer leave for the control that last received a move. Native
+  widgetsets get WM_MOUSELEAVE from the window system; without an equivalent the
+  application can never erase a cursor it painted directly, so the crosshair
+  stayed on the paper after the pointer had left the window. }
+procedure BrowserFireMouseLeave;
+begin
+  if (BrowserMouseTarget = nil) or not BrowserMouseTarget.HandleAllocated then Exit;
+  BrowserMouseTarget.Perform(CM_MOUSELEAVE, WParam(0), LParam(0));
+  if BrowserMouseTarget is TCustomControl then
+    LCLIntf.InvalidateRect(HWND(BrowserMouseTarget), nil, False);
+  BrowserMouseTarget := nil;
+end;
+
+procedure CallbackMouseLeave(AWindowHandle: TCDForm);
+begin
+  BrowserFireMouseLeave;
+  if AWindowHandle <> nil then
+    LCLIntf.InvalidateRect(HWND(AWindowHandle.LCLForm), nil, False);
 end;
 
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
@@ -318,6 +342,17 @@ begin
     control image, so a move that only painted has to invalidate the surface or
     the cursor never follows the pointer. Chrome controls are excluded to keep
     hovering over panels and toolbars free of repaints. }
+  { Track the hovered control the way a native window system does: entering a
+    control sets FMouseInClient, leaving clears it. Without the enter message
+    TControl.CMMouseLeave exits early, so an application could never erase a
+    crosshair it had painted and the cursor stayed on screen forever. }
+  if lTarget <> BrowserMouseTarget then
+  begin
+    BrowserFireMouseLeave;
+    BrowserMouseTarget := lTarget;
+    if lTarget.HandleAllocated then
+      lTarget.Perform(CM_MOUSEENTER, WParam(0), LParam(0));
+  end;
   if lTarget is TCustomControl then
     LCLIntf.InvalidateRect(HWND(lTarget), nil, False);
 
