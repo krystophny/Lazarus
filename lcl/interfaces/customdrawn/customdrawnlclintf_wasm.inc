@@ -103,3 +103,27 @@ procedure TCDWidgetSet.ShowVirtualKeyboard;
 begin
   { Browser input focus controls the platform keyboard. }
 end;
+
+function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;
+var
+  Data: TJSONObject;
+  Items: TJSONArray;
+  JSON: String;
+  I, Selected: Integer;
+begin
+  Result := False;
+  if AItems.Count = 0 then Exit;
+  Data := TJSONObject.Create(['kind', 'select', 'caption', 'Choose item']);
+  try
+    Items := TJSONArray.Create;
+    Data.Add('items', Items);
+    for I := 0 to AItems.Count-1 do Items.Add(AItems[I]);
+    JSON := Data.AsJSON;
+    Selected := BrowserDialog(PChar(JSON), Length(JSON));
+    Result := (Selected >= 0) and (Selected < AItems.Count);
+    if Result and Assigned(OnShowSelectItemDialogResult) then
+      OnShowSelectItemDialogResult(Selected);
+  finally
+    Data.Free;
+  end;
+end;

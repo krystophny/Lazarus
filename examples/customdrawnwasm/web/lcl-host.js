@@ -179,6 +179,7 @@ const imports = {
 const buttonNames = {1:'OK', 2:'Cancel', 3:'Abort', 4:'Retry', 5:'Ignore', 6:'Yes', 7:'No',
   8:'All', 9:'No to all', 10:'Yes to all', 11:'Close', 12:'Continue', 13:'Try again'};
 function showDialog(options) {
+  if (options.kind === 'select') return selectItemDialog(options);
   const dialog = document.createElement('dialog');
   dialog.setAttribute('aria-label', options.caption || 'TpX');
   dialog.style.cssText = 'max-width:min(600px,90vw);border:1px solid #a5b8ce;padding:20px;background:white;color:#203e69;font:15px system-ui';
@@ -212,6 +213,35 @@ function showDialog(options) {
       finish(options.escape ?? (choices.includes(2) ? 2 : typeof choices[0] === 'object' ? choices[0].id : choices[0]));
     });
     dialog.showModal();
+  });
+}
+function selectItemDialog(options) {
+  const dialog = document.createElement('dialog');
+  dialog.setAttribute('aria-label', options.caption);
+  dialog.style.cssText = 'max-width:90vw;padding:16px;border:1px solid #a5b8ce;font:15px system-ui';
+  const form = document.createElement('form');
+  const label = document.createElement('label');
+  label.textContent = options.caption;
+  const select = document.createElement('select');
+  select.size = Math.min(10, options.items.length);
+  select.style.cssText = 'display:block;min-width:240px;max-width:80vw;max-height:60vh;margin:12px 0;font:inherit';
+  options.items.forEach((caption, index) => {
+    const option = document.createElement('option');
+    option.textContent = caption; option.value = index; select.append(option);
+  });
+  select.selectedIndex = 0;
+  label.append(select);
+  const ok = document.createElement('button'); ok.type = 'submit'; ok.textContent = 'OK';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+  form.append(label, ok, cancel); dialog.append(form); document.body.append(dialog);
+  return new Promise(resolve => {
+    const finish = value => { dialog.close(); dialog.remove(); canvas.focus({preventScroll:true}); resolve(value); };
+    form.onsubmit = event => { event.preventDefault(); finish(select.selectedIndex); };
+    select.ondblclick = () => finish(select.selectedIndex);
+    select.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); finish(select.selectedIndex); } };
+    cancel.onclick = () => finish(-1);
+    dialog.addEventListener('cancel', event => { event.preventDefault(); finish(-1); });
+    dialog.showModal(); select.focus();
   });
 }
 function commonDialog(options) {

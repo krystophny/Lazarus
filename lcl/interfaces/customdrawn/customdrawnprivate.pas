@@ -69,6 +69,10 @@ type
   end;
 
   TCDIntfComboBox = class(TCDComboBox)
+  {$ifdef CPUWASM32}
+  protected
+    procedure ShowSelectItemDialogResult(ASelectedItem: Integer); override;
+  {$endif}
   public
     LCLControl: TCustomComboBox;
   end;
@@ -633,6 +637,15 @@ begin
     (AControl is TCDIntfSpinEdit)
     ;
 end;
+
+{$ifdef CPUWASM32}
+procedure TCDIntfComboBox.ShowSelectItemDialogResult(ASelectedItem: Integer);
+begin
+  inherited ShowSelectItemDialogResult(ASelectedItem);
+  LCLSendChangedMsg(LCLControl);
+  LCLSendSelectionChangedMsg(LCLControl);
+end;
+{$endif}
 
 { TCDIntfEdit }
 
