@@ -1,4 +1,5 @@
-{ SPDX-License-Identifier: MIT }
+{ SPDX-License-Identifier: MIT
+  Counter and drawing controls for the LCL browser example. }
 unit DemoMain;
 {$mode objfpc}{$H+}
 interface

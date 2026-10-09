@@ -1,3 +1,6 @@
+{ Regression tests for LazCanvas clipping, state and pixel-copy semantics.
+  See COPYING.modifiedLGPL.txt for the license and linking exception. }
+
 unit TestLazCanvas;
 
 {$mode objfpc}{$H+}
