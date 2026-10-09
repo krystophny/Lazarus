@@ -49,6 +49,9 @@ type
   published
     class function  CreateHandle(const AWinControl: TWinControl;
           const AParams: TCreateParams): TLCLHandle; override;
+    {$ifdef CPUWASM32}
+    class procedure DestroyHandle(const AWinControl: TWinControl); override;
+    {$endif}
     class procedure ShowHide(const AWinControl: TWinControl); override;
 
     class procedure AddPage(const ATabControl: TCustomTabControl;
@@ -295,15 +298,57 @@ begin
   Result := TCDWSWinControl.CreateHandle(AWinControl, AParams);
 end;
 
+{$ifdef CPUWASM32}
+procedure UpdateBrowserTabPages(const Tabs: TCustomTabControl;
+  const Chrome: TCDPageControl; ShowTabs: Boolean);
+var
+  R: TRect;
+  I: Integer;
+  Page: TCustomPage;
+begin
+  { Actual LCL pages are siblings of the injected tab chrome, so hiding
+    the chrome preserves page contents and programmatic page selection. }
+  Chrome.Visible := ShowTabs;
+  if ShowTabs then
+    R := Chrome.GetTabContentRect(Size(Tabs.Width, Tabs.Height))
+  else
+    R := Rect(0, 0, Tabs.Width, Tabs.Height);
+  Tabs.DisableAlign;
+  try
+    for I := 0 to Tabs.PageCount - 1 do
+    begin
+      Page := Tabs.Page[I];
+      Page.BorderSpacing.Top := R.Top;
+      Page.BorderSpacing.Left := R.Left;
+      Page.BorderSpacing.Right := Tabs.Width - R.Right;
+      Page.BorderSpacing.Bottom := Tabs.Height - R.Bottom;
+    end;
+  finally
+    Tabs.EnableAlign;
+  end;
+  Tabs.Invalidate;
+end;
+{$endif}
+
 { TCDWSCustomTabControl }
 
 class procedure TCDWSCustomTabControl.InjectCDControl(
   const AWinControl: TWinControl; var ACDControlField: TCDControl);
+{$ifdef CPUWASM32}
+var I: Integer; Tabs: TCustomTabControl;
+{$endif}
 begin
   ACDControlField := TCDIntfPageControl.Create(AWinControl);
   TCDIntfPageControl(ACDControlField).LCLControl := TCustomTabControl(AWinControl);
   ACDControlField.Parent := AWinControl;
   ACDControlField.Align := alClient;
+  {$ifdef CPUWASM32}
+  Tabs := TCustomTabControl(AWinControl);
+  for I := 0 to Tabs.PageCount-1 do
+    if Tabs.Page[I].TabVisible then
+      TCDPageControl(ACDControlField).AddPage(Tabs.Page[I].Caption);
+  TCDPageControl(ACDControlField).PageIndex := Tabs.PageIndex;
+  {$endif}
   {$ifdef VerboseCDInjectedControlNames}ACDControlField.Name := 'CustomDrawnInternal_' + AWinControl.Name;{$endif}
 end;
 
@@ -331,6 +376,20 @@ begin
   end;
 end;
 
+{$ifdef CPUWASM32}
+class procedure TCDWSCustomTabControl.DestroyHandle(const AWinControl: TWinControl);
+var Handle: TCDWinControl; I: Integer; Tabs: TCDPageControl;
+begin
+  Handle := TCDWinControl(AWinControl.Handle);
+  if Handle.CDControl is TCDPageControl then
+  begin
+    Tabs := TCDPageControl(Handle.CDControl);
+    for I := Tabs.Tabs.Count-1 downto 0 do Tabs.GetPage(I).Free;
+  end;
+  TCDWSWinControl.DestroyHandle(AWinControl);
+end;
+{$endif}
+
 class procedure TCDWSCustomTabControl.AddPage(
   const ATabControl: TCustomTabControl; const AChild: TCustomPage;
   const AIndex: integer);
@@ -350,6 +409,9 @@ begin
   end;
 
   lCDPC := TCDPageControl(lCDWinControl.CDControl);
+  {$ifdef CPUWASM32}
+  if not ((AIndex < lCDPC.Tabs.Count) and (lCDPC.Tabs[AIndex] = AChild.Caption)) then
+  {$endif}
   lCDPC.InsertPage(AIndex, AChild.Caption);
 
   { The injected TCDIntfPageControl (alClient) draws the whole tab
@@ -363,6 +425,9 @@ begin
     paints. (Win32 achieves the same by overriding ClientRect
     globally; here ClientRect stays the full rect so the injected
     keeps full bounds, and the offset is applied per-page instead.) }
+  {$ifdef CPUWASM32}
+  UpdateBrowserTabPages(ATabControl, lCDPC, ATabControl.ShowTabs);
+  {$else}
   R := lCDPC.GetTabContentRect(Size(ATabControl.Width, ATabControl.Height));
   for i := 0 to ATabControl.PageCount - 1 do
   begin
@@ -372,6 +437,7 @@ begin
     lPage.BorderSpacing.Right  := ATabControl.Width  - R.Right;
     lPage.BorderSpacing.Bottom := ATabControl.Height - R.Bottom;
   end;
+  {$endif}
 end;
 
 class procedure TCDWSCustomTabControl.MovePage(
@@ -446,8 +512,22 @@ end;
 
 class procedure TCDWSCustomTabControl.ShowTabs(
   const ATabControl: TCustomTabControl; AShowTabs: boolean);
+{$ifdef CPUWASM32}
+var
+  Handle: TCDWinControl;
+{$endif}
 begin
   inherited ShowTabs(ATabControl, AShowTabs);
+  {$ifdef CPUWASM32}
+  if not ATabControl.HandleAllocated then Exit;
+  Handle := TCDWinControl(ATabControl.Handle);
+  if not Handle.CDControlInjected then
+  begin
+    InjectCDControl(ATabControl, Handle.CDControl);
+    Handle.CDControlInjected := True;
+  end;
+  UpdateBrowserTabPages(ATabControl, TCDPageControl(Handle.CDControl), AShowTabs);
+  {$endif}
 end;
 
 class procedure TCDWSCustomTabControl.UpdateProperties(
