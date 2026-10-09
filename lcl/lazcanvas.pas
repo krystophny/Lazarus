@@ -305,7 +305,7 @@ procedure TLazCanvas.DoRectangleFill(const Bounds: TRect);
 var
   b : TRect;
   Intf: TLazIntfImage;
-  Value: LongWord;
+  Value, PreserveMask: LongWord;
   Row: PLongWord;
   X, Y: Integer;
 begin
@@ -348,14 +348,25 @@ begin
     with Intf.DataDescription do
       if (Format = ricfRGBA) and (BitsPerPixel = 32) and (MaskBitsPerPixel = 0)
         and (RedPrec = 8) and (GreenPrec = 8) and (BluePrec = 8)
-        and (AlphaPrec = 8) and (PaletteColorCount = 0)
+        and (AlphaPrec in [0, 8]) and (PaletteColorCount = 0)
+        and (RedShift in [0, 8, 16, 24]) and (GreenShift in [0, 8, 16, 24])
+        and (BlueShift in [0, 8, 16, 24]) and (RedShift <> GreenShift)
+        and (RedShift <> BlueShift) and (GreenShift <> BlueShift)
+        and ((AlphaPrec = 0) or ((AlphaShift in [0, 8, 16, 24])
+          and (AlphaShift <> RedShift) and (AlphaShift <> GreenShift)
+          and (AlphaShift <> BlueShift)))
         and (BitOrder = riboBitsInOrder) and (ByteOrder = DefaultByteOrder)
         and (LineOrder = riloTopToBottom) then
       begin
         Value := (LongWord(Brush.FPColor.Red shr 8) shl RedShift)
           or (LongWord(Brush.FPColor.Green shr 8) shl GreenShift)
-          or (LongWord(Brush.FPColor.Blue shr 8) shl BlueShift)
-          or (LongWord(Brush.FPColor.Alpha shr 8) shl AlphaShift);
+          or (LongWord(Brush.FPColor.Blue shr 8) shl BlueShift);
+        PreserveMask := 0;
+        if AlphaPrec = 8 then
+          Value := Value or (LongWord(Brush.FPColor.Alpha shr 8) shl AlphaShift)
+        else
+          PreserveMask := not ((LongWord($FF) shl RedShift)
+            or (LongWord($FF) shl GreenShift) or (LongWord($FF) shl BlueShift));
         Inc(b.Left, FWindowOrg.X);
         Inc(b.Right, FWindowOrg.X);
         Inc(b.Top, FWindowOrg.Y);
@@ -367,7 +378,10 @@ begin
         for Y := b.Top to b.Bottom do
         begin
           Row := PLongWord(Intf.GetDataLineStart(Y));
-          for X := b.Left to b.Right do Row[X] := Value;
+          if PreserveMask = 0 then
+            for X := b.Left to b.Right do Row[X] := Value
+          else
+            for X := b.Left to b.Right do Row[X] := (Row[X] and PreserveMask) or Value;
         end;
         Exit;
       end;

@@ -23,7 +23,7 @@ type
     procedure ComplexClipFill;
     procedure RectClipState;
     procedure ComplexClipState;
-    procedure CopyPreservesPadding;
+    procedure CopyAndFillPreservePadding;
     procedure CopyAliasedPixels;
   end;
 
@@ -104,7 +104,7 @@ begin
   AssertFalse('outside snapshot', Region.IsPointInRegion(7, 7));
 end;
 
-procedure TLazCanvasTest.CopyPreservesPadding;
+procedure TLazCanvasTest.CopyAndFillPreservePadding;
 var
   Desc: TRawImageDescription;
   Source: TLazIntfImage;
@@ -123,6 +123,10 @@ begin
     FCanvas.CanvasCopyRect(Canvas, 0, 0, 0, 0, 1, 1);
     AssertEquals('copied channel', $FFFF, FImage.Colors[0, 0].Red);
     AssertEquals('destination padding', $AB, FImage.PixelData[0]);
+    FCanvas.Brush.FPColor := colBlue;
+    FCanvas.FillRect(0, 0, 2, 2);
+    AssertEquals('filled channel', $FFFF, FImage.Colors[0, 0].Blue);
+    AssertEquals('filled padding', $AB, FImage.PixelData[0]);
   finally
     Canvas.Free;
     Source.Free;
