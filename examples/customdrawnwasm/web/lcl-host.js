@@ -13,6 +13,12 @@ if (!WebAssembly.Suspending || !WebAssembly.promising) {
 const textCanvas = document.createElement('canvas');
 const textContext = textCanvas.getContext('2d', {willReadFrequently: true});
 const decoder = new TextDecoder();
+// Entries correspond to the negated LCL crDefault..crLow cursor constants.
+const standardCursors = ['default', 'none', 'default', 'crosshair', 'text', 'default',
+  'nesw-resize', 'ns-resize', 'nwse-resize', 'ew-resize', 'n-resize', 'wait',
+  'grab', 'no-drop', 'col-resize', 'row-resize', 'copy', 'progress', 'not-allowed',
+  'progress', 'help', 'pointer', 'move', 'nw-resize', 'n-resize', 'ne-resize',
+  'w-resize', 'e-resize', 'sw-resize', 's-resize', 'se-resize'];
 const api = {};
 let image, currentFont = "13px sans-serif", fontStyle = 0, fontAngle = 0;
 const messageWaiters = [];
@@ -89,6 +95,7 @@ const imports = {
     } else element.onclick = event => { event.stopPropagation(); dispatch(); };
   },
   title: (pointer, length) => { document.title = text(pointer, length); },
+  cursor: index => { canvas.style.cursor = standardCursors[-index] || 'default'; },
   timer: (handle, interval) => setInterval(() => {
     if (ready) guarded(async () => {
       await api.lcl_timer(handle);

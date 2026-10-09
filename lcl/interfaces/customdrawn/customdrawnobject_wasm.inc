@@ -5,6 +5,7 @@ procedure BrowserPresent(Data: Pointer; Width, Height, Left, Top, Right, Bottom,
 procedure BrowserInvalidate; external 'lcl' name 'invalidate';
 procedure BrowserWaitMessage(Form: PtrUInt); external 'lcl' name 'wait_message';
 procedure BrowserTitle(Text: PChar; Count: LongInt); external 'lcl' name 'title';
+procedure BrowserCursor(Index: LongInt); external 'lcl' name 'cursor';
 function BrowserMessage(Text, Caption: PChar; CountText, CountCaption: LongInt;
   Flags: LongInt): LongInt; external 'lcl' name 'message';
 function BrowserDialog(Data: PChar; Count: LongInt): LongInt; external 'lcl' name 'dialog';
@@ -34,6 +35,7 @@ var
   BrowserWidth: LongInt = 720;
   BrowserHeight: LongInt = 480;
   BrowserMouse: TPoint;
+  BrowserCursorHandle: HCURSOR = 1;
   { Modifier mask reported by the browser host: 1 shift, 2 ctrl, 4 alt,
     8 left button. CustomDrawn routing asks GetKeyState for these. }
   BrowserMods: LongInt = 0;
@@ -245,6 +247,7 @@ begin
     2: CallbackMouseMove(Form, X, Y, BrowserShiftState(Modifiers));
     3..5: CallbackMouseDown(Form, X, Y, MouseButton, BrowserShiftState(Modifiers), Kind-1);
   end;
+  CDWidgetSet.UpdateBrowserCursor;
   if Kind = 2 then
   begin
     TBrowserApplication(Application).ReleaseComponents;

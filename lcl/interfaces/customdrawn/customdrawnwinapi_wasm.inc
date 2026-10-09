@@ -62,6 +62,23 @@ begin
 end;
 
 
+function TCDWidgetSet.DestroyCursor(Handle: HCURSOR): Boolean;
+begin
+  { Standard cursor handles have no allocated native resources. }
+  Result := (Handle >= 1) and (Handle <= 1 - crLow);
+end;
+
+function TCDWidgetSet.SetCursor(ACursor: HCURSOR): HCURSOR;
+begin
+  Result := BrowserCursorHandle;
+  if ACursor = BrowserCursorHandle then Exit;
+  BrowserCursorHandle := ACursor;
+  if (ACursor >= 1) and (ACursor <= 1 - crLow) then
+    BrowserCursor(1 - LongInt(ACursor))
+  else
+    BrowserCursor(crDefault);
+end;
+
 function TCDWidgetSet.EnumFontFamiliesEx(DC: HDC; lpLogFont: PLogFont; Callback: FontEnumExProc; Lparam: LParam; Flags: dword): longint;
 begin
   Result := 0; { Font enumeration is outside this initial backend slice. }

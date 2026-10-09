@@ -30,6 +30,10 @@ function AskUser(const DialogCaption, DialogMessage: string; DialogType:
    LongInt; Buttons: TDialogButtons; HelpCtx: Longint): LongInt; override;
 
 function CreateEmptyRegion: hRGN; override;
+{$ifdef CD_Wasm}
+function CreateStandardCursor(ACursor: SmallInt): HCURSOR; override;
+procedure UpdateBrowserCursor;
+{$endif}
 (*function CreateStandardCursor(ACursor: SmallInt): HCURSOR; override;
 function CreateRubberBand(const ARect: TRect; const ABrush: HBrush = 0): HWND; override;
 procedure DrawDefaultDockImage(AOldRect, ANewRect: TRect; AOperation: TDockImageOperation); override;

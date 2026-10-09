@@ -26,6 +26,48 @@ begin
   end;
 end;
 
+function TCDWidgetSet.CreateStandardCursor(ACursor: SmallInt): HCURSOR;
+begin
+  { Nonzero symbolic handles prevent TScreen falling back to native .cur
+    resources, which are not needed for the browser's CSS cursors. }
+  if (ACursor >= crLow) and (ACursor <= crHigh) then
+    Result := 1 - ACursor
+  else
+    Result := 0;
+end;
+
+procedure TCDWidgetSet.UpdateBrowserCursor;
+var
+  Form: TCDNonNativeForm;
+  Control: TWinControl;
+  Cursor: HCURSOR;
+begin
+  Form := GetCurrentForm;
+  if (Form = nil) or (Screen = nil) then Exit;
+  if Screen.RealCursor <> crDefault then
+  begin
+    SetCursor(Screen.Cursors[Screen.RealCursor]);
+    Exit;
+  end;
+  Control := Form.LastMouseDownControl;
+  if Control = nil then
+    Control := FindControlWhichReceivedEvent(Form.LCLForm, Form.Children,
+      BrowserMouse.X, BrowserMouse.Y);
+  while Control <> nil do
+  begin
+    Cursor := 0;
+    if Control.HandleAllocated then
+      Cursor := HCURSOR(TCDBaseControl(Control.Handle).Props['BrowserCursor']);
+    if Cursor > 1 then
+    begin
+      SetCursor(Cursor);
+      Exit;
+    end;
+    Control := Control.Parent;
+  end;
+  SetCursor(Screen.Cursors[crDefault]);
+end;
+
 procedure TCDWidgetSet.HideVirtualKeyboard();
 begin
   { Browser input focus controls the platform keyboard. }
