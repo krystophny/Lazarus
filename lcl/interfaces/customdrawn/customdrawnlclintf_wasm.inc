@@ -3,13 +3,27 @@
 
 function TCDWidgetSet.AskUser(const DialogCaption, DialogMessage: string; DialogType:
    LongInt; Buttons: TDialogButtons; HelpCtx: Longint): LongInt;
+var
+  Data: TJSONObject;
+  Choices: TJSONArray;
+  I: Integer;
+  JSON: String;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: AskUser is not implemented');
+  Data := TJSONObject.Create(['kind', 'message', 'caption', DialogCaption, 'message', DialogMessage]);
+  try
+    Choices := TJSONArray.Create;
+    Data.Add('buttons', Choices);
+    for I := 0 to Buttons.Count-1 do Choices.Add(Buttons[I].ModalResult);
+    JSON := Data.AsJSON;
+    Result := BrowserDialog(PChar(JSON), Length(JSON));
+  finally
+    Data.Free;
+  end;
 end;
 
 procedure TCDWidgetSet.HideVirtualKeyboard();
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: HideVirtualKeyboard is not implemented');
+  { Browser input focus controls the platform keyboard. }
 end;
 
 function TCDWidgetSet.IsMobilePlatform: Boolean;
@@ -24,8 +38,23 @@ function TCDWidgetSet.PromptUser(const DialogCaption : string;
                           ButtonCount   : LongInt;
                           DefaultIndex  : LongInt;
                           EscapeResult  : LongInt) : LongInt;
+var
+  Data: TJSONObject;
+  Choices: TJSONArray;
+  JSON: String;
+  I: Integer;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: PromptUser is not implemented');
+  Data := TJSONObject.Create(['kind', 'message', 'caption', DialogCaption,
+    'message', DialogMessage, 'escape', EscapeResult, 'default', DefaultIndex]);
+  try
+    Choices := TJSONArray.Create;
+    Data.Add('buttons', Choices);
+    for I := 0 to ButtonCount-1 do Choices.Add(Buttons[I]);
+    JSON := Data.AsJSON;
+    Result := BrowserDialog(PChar(JSON), Length(JSON));
+  finally
+    Data.Free;
+  end;
 end;
 
 function TCDWidgetSet.RawImage_FromDevice(out ARawImage: TRawImage; ADC: HDC; const ARect: TRect): Boolean;
@@ -36,5 +65,5 @@ end;
 
 procedure TCDWidgetSet.ShowVirtualKeyboard;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: ShowVirtualKeyboard is not implemented');
+  { Browser input focus controls the platform keyboard. }
 end;

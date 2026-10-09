@@ -51,7 +51,8 @@ uses
   lazcanvas, lazregions, lazdeviceapis,
   LCLPlatformDef, InterfaceBase, Themes, Dialogs, Buttons,
   Controls, StdCtrls, ComCtrls, Forms, lclproc, IntfGraphics, GraphType,
-  LCLType, LMessages, Graphics, LCLStrConsts, Menus, LazLoggerBase;
+  LCLType, LMessages, Graphics, LCLStrConsts, Menus, LazLoggerBase
+  {$ifdef CD_Wasm}, FPJSON{$endif};
 
 type
   {$ifdef CD_Windows}
@@ -687,7 +688,10 @@ exports
   LCLWasmResize name 'lcl_resize',
   LCLWasmKey name 'lcl_key',
   LCLWasmWheel name 'lcl_wheel',
-  LCLWasmTimer name 'lcl_timer';
+  LCLWasmTimer name 'lcl_timer',
+  LCLWasmControl name 'lcl_control',
+  LCLWasmMenu name 'lcl_menu',
+  LCLWasmIdle name 'lcl_idle';
 {$endif}
 
 end.

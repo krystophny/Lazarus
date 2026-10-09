@@ -1,14 +1,14 @@
 { Browser platform backend for the LCL CustomDrawn interface.
   See COPYING.modifiedLGPL.txt for license and linking exception. }
 
-procedure BrowserPresent(Data: Pointer; Width, Height: LongInt); external 'lcl' name 'present';
+procedure BrowserPresent(Data: Pointer; Width, Height, Left, Top, Right, Bottom, Last: LongInt); external 'lcl' name 'present';
 procedure BrowserInvalidate; external 'lcl' name 'invalidate';
+procedure BrowserWaitMessage; external 'lcl' name 'wait_message';
 procedure BrowserTitle(Text: PChar; Count: LongInt); external 'lcl' name 'title';
-{ Non-blocking report for the host: a browser cannot run a modal native dialog,
-  but it can show the text. Used by MessageBox so an application that reports a
-  disabled feature (or any error) is heard instead of crashing. }
-procedure BrowserMessage(Text, Caption: PChar; CountText, CountCaption: LongInt;
-  Flags: LongInt); external 'lcl' name 'message';
+function BrowserMessage(Text, Caption: PChar; CountText, CountCaption: LongInt;
+  Flags: LongInt): LongInt; external 'lcl' name 'message';
+function BrowserDialog(Data: PChar; Count: LongInt): LongInt; external 'lcl' name 'dialog';
+procedure BrowserMenus(Data: PChar; Count: LongInt); external 'lcl' name 'menus';
 function BrowserTimer(Handle, Interval: LongInt): LongInt; external 'lcl' name 'timer';
 procedure BrowserClearTimer(Handle: LongInt); external 'lcl' name 'clear_timer';
 function BrowserMeasure(Text: PChar; Count, FontSize: LongInt): LongInt; external 'lcl' name 'measure';
@@ -22,7 +22,14 @@ type
 var
   { Set by any invalidation; frames without it skip composing and presenting. }
   BrowserDirty: Boolean = True;
+  BrowserFullDamage: Boolean = True;
+  BrowserDamage: array[0..31] of TRect;
+  BrowserDamageCount: Integer = 0;
+  BrowserMenusDirty: Boolean = True;
+  BrowserMenuForm: TCustomForm = nil;
   BrowserInIdle: Boolean = False;
+  BrowserClipboardFormats: array[TClipboardType] of array of TClipboardFormat;
+  BrowserClipboardRequest: array[TClipboardType] of TClipboardRequestEvent;
   BrowserWidth: LongInt = 720;
   BrowserHeight: LongInt = 480;
   BrowserMouse: TPoint;
@@ -79,6 +86,69 @@ begin
   BrowserInvalidate;
 end;
 
+function BrowserMenuJSON(Item: TMenuItem): TJSONObject;
+var Children: TJSONArray; I: Integer;
+begin
+  Result := TJSONObject.Create(['id', PtrInt(Item), 'caption', Item.Caption,
+    'enabled', Item.Enabled, 'visible', Item.Visible, 'checked', Item.Checked]);
+  Children := TJSONArray.Create;
+  Result.Add('children', Children);
+  for I := 0 to Item.Count-1 do Children.Add(BrowserMenuJSON(Item.Items[I]));
+end;
+
+procedure SyncBrowserMenus;
+var Form: TCDNonNativeForm; Data: TJSONObject; JSON: String;
+begin
+  Form := GetCurrentForm;
+  if Form = nil then Exit;
+  if not BrowserMenusDirty and (BrowserMenuForm = Form.LCLForm) then Exit;
+  BrowserMenusDirty := False;
+  BrowserMenuForm := Form.LCLForm;
+  if Form.LCLForm.Menu = nil then
+  begin
+    JSON := '{"children":[]}';
+    BrowserMenus(PChar(JSON), Length(JSON));
+    Exit;
+  end;
+  Data := BrowserMenuJSON(Form.LCLForm.Menu.Items);
+  try
+    JSON := Data.AsJSON;
+    BrowserMenus(PChar(JSON), Length(JSON));
+  finally
+    Data.Free;
+  end;
+end;
+
+procedure LCLWasmMenu(Handle: LongInt); cdecl;
+var Item: TMenuItem; Form: TCDNonNativeForm;
+  function FindItem(Root: TMenuItem): TMenuItem;
+  var I: Integer;
+  begin
+    if PtrUInt(Root) = PtrUInt(Handle) then Exit(Root);
+    Result := nil;
+    for I := 0 to Root.Count-1 do
+    begin
+      Result := FindItem(Root.Items[I]);
+      if Result <> nil then Exit;
+    end;
+  end;
+begin
+  Form := GetCurrentForm;
+  if (Form = nil) or Form.InputDisabled or (Form.LCLForm.Menu = nil) then Exit;
+  Item := FindItem(Form.LCLForm.Menu.Items);
+  if (Item = nil) or not Item.Enabled or not Item.Visible then Exit;
+  BrowserMenusDirty := True;
+  Item.Click;
+  LCLWasmIdle;
+  SyncBrowserMenus;
+end;
+
+procedure LCLWasmControl(Handle: LongInt); cdecl;
+begin
+  DispatchBrowserDOMControl(PtrUInt(Handle));
+  LCLWasmIdle;
+end;
+
 procedure LCLWasmLeave; cdecl;
 var
   Form: TCDNonNativeForm;
@@ -96,23 +166,58 @@ procedure LCLWasmRender; cdecl;
 var
   Form: TCDNonNativeForm;
   Raw: TRawImage;
+  Damage: array[0..31] of TRect;
+  Count, I: Integer;
+  FullDamage: Boolean;
+  procedure MarkControls(List: TFPList);
+  var J: Integer; Control: TCDWinControl;
+  begin
+    if List = nil then Exit;
+    for J := 0 to List.Count-1 do
+    begin
+      Control := TCDWinControl(List[J]);
+      Control.BrowserNeedsPaint := FullDamage or (Control.InvalidateCount > 0)
+        or (Control.ControlImage = nil);
+      MarkControls(Control.Children);
+    end;
+  end;
+
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
   SyncBrowserDOM;
+  SyncBrowserMenus;
   if not BrowserDirty then Exit;
+  FullDamage := BrowserFullDamage or (Form.Image = nil);
+  if Form.Image <> nil then
+    FullDamage := FullDamage or (Form.Image.Width <> Form.LCLForm.ClientWidth)
+      or (Form.Image.Height <> Form.LCLForm.ClientHeight);
+  Count := BrowserDamageCount;
+  Damage := BrowserDamage;
   BrowserDirty := False;
+  BrowserFullDamage := False;
+  BrowserDamageCount := 0;
   UpdateControlLazImageAndCanvas(Form.Image, Form.Canvas,
     Form.LCLForm.ClientWidth, Form.LCLForm.ClientHeight, clfARGB32);
-  RenderForm(Form.Image, Form.Canvas, Form.LCLForm);
   if (Form.Image = nil) or (Form.Image.Width <= 0) or (Form.Image.Height <= 0) then
   begin
-    { Scheduled before the form was sized: stay dirty so the next frame paints. }
     BrowserDirty := True;
+    BrowserFullDamage := True;
     Exit;
   end;
-  Form.Image.GetRawImage(Raw);
-  BrowserPresent(Raw.Data, Form.Image.Width, Form.Image.Height);
+  if FullDamage then
+  begin
+    Count := 1;
+    Damage[0] := Rect(0, 0, Form.Image.Width, Form.Image.Height);
+  end;
+  MarkControls(GetCDWinControlList(Form.LCLForm));
+  for I := 0 to Count - 1 do
+  begin
+    RenderForm(Form.Image, Form.Canvas, Form.LCLForm, @Damage[I]);
+    Form.Image.GetRawImage(Raw);
+    BrowserPresent(Raw.Data, Form.Image.Width, Form.Image.Height,
+      Damage[I].Left, Damage[I].Top, Damage[I].Right, Damage[I].Bottom, Ord(I = Count-1));
+  end;
 end;
 
 procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
@@ -122,6 +227,7 @@ var
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
+  if Kind <> 2 then BrowserMenusDirty := True;
   BrowserMouse := Point(X, Y);
   BrowserMods := Modifiers;
   MouseButton := mbLeft;
@@ -132,7 +238,12 @@ begin
     1: CallbackMouseUp(Form, X, Y, MouseButton, BrowserShiftState(Modifiers));
     2: CallbackMouseMove(Form, X, Y, BrowserShiftState(Modifiers));
   end;
-  LCLWasmIdle;
+  if Kind = 2 then
+  begin
+    TBrowserApplication(Application).ReleaseComponents;
+    TBrowserApplication(Application).ProcessAsyncCallQueue;
+  end
+  else LCLWasmIdle;
 end;
 
 { Kind: 0 key down, 1 key up, 2 character input. Key carries a Windows virtual
@@ -143,6 +254,7 @@ var
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
+  BrowserMenusDirty := True;
   BrowserMods := Modifiers;
   case Kind of
     0: CallbackKeyDown(Form, Word(Key));
@@ -171,8 +283,10 @@ begin
   BrowserWidth := Max(1, Width);
   BrowserHeight := Max(1, Height);
   BrowserDirty := True;
+  BrowserFullDamage := True;
   Form := GetCurrentForm;
-  if Form <> nil then Form.LCLForm.SetBounds(0, 0, BrowserWidth, BrowserHeight);
+  if Application.MainForm <> nil then
+    Application.MainForm.SetBounds(0, 0, BrowserWidth, BrowserHeight);
   LCLWasmIdle;
 end;
 
@@ -237,12 +351,12 @@ end;
 
 procedure TCDWidgetSet.AppProcessMessages;
 begin
-  { Browser events are delivered through exported callbacks, without a nested loop. }
+  LCLWasmIdle;
 end;
 
 procedure TCDWidgetSet.AppWaitMessage;
 begin
-  raise ENotSupportedException.Create('Blocking message loops are unsupported in the browser');
+  BrowserWaitMessage;
 end;
 
 procedure TCDWidgetSet.AppTerminate;

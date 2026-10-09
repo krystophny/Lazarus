@@ -189,6 +189,13 @@ begin
   Count := 0;
   List := nil;
 
+  {$ifdef CD_Wasm}
+  Count := Length(BrowserClipboardFormats[ClipboardType]);
+  GetMem(List, Count * SizeOf(TClipboardFormat));
+  for i := 0 to Count-1 do List[i] := BrowserClipboardFormats[ClipboardType][i];
+  Result := True;
+  Exit;
+  {$endif}
   Count := FClipBoardFormats.Count;
   GetMem(List, Count * SizeOf(TClipboardFormat));
 
@@ -4615,7 +4622,11 @@ begin
     // conversion of coordinates to window coordinates. Better invalidate everything
     // then too few. And anyway on each draw we send everything.
     // This fixes changing the selection in TCustomGrid
+    {$ifdef CD_Wasm}
+    Result := BackendInvalidateRect(aHandle, Rect, BErase);
+    {$else}
     Result := BackendInvalidateRect(lControl.Handle, nil, BErase);
+    {$endif}
   end
   // Invalidate on a form
   else

@@ -26,16 +26,28 @@ begin
 end;
 
 function TCDWidgetSet.ClipboardGetData(ClipboardType: TClipboardType;
-  FormatID: TClipboardFormat; Stream: TStream): boolean;
+  FormatID: TClipboardFormat; Stream: TStream): Boolean;
+var I: Integer;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: ClipboardGetData is not implemented');
+  Result := False;
+  if (Stream = nil) or not Assigned(BrowserClipboardRequest[ClipboardType]) then Exit;
+  for I := 0 to High(BrowserClipboardFormats[ClipboardType]) do
+    if BrowserClipboardFormats[ClipboardType][I] = FormatID then
+    begin
+      BrowserClipboardRequest[ClipboardType](FormatID, Stream);
+      Exit(True);
+    end;
 end;
 
 function TCDWidgetSet.ClipboardGetOwnerShip(ClipboardType: TClipboardType;
-  OnRequestProc: TClipboardRequestEvent; FormatCount: integer;
-  Formats: PClipboardFormat): boolean;
+  OnRequestProc: TClipboardRequestEvent; FormatCount: Integer;
+  Formats: PClipboardFormat): Boolean;
+var I: Integer;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: ClipboardGetOwnerShip is not implemented');
+  BrowserClipboardRequest[ClipboardType] := OnRequestProc;
+  SetLength(BrowserClipboardFormats[ClipboardType], FormatCount);
+  for I := 0 to FormatCount-1 do BrowserClipboardFormats[ClipboardType][I] := Formats[I];
+  Result := True;
 end;
 
 
@@ -178,11 +190,38 @@ begin
 end;
 
 function TCDWidgetSet.BackendInvalidateRect(aHandle: HWND; Rect: pRect; bErase: Boolean): Boolean;
+var
+  Control: TWinControl;
+  Position: TPoint;
+  Damage, Clipped: TRect;
+  I: Integer;
 begin
-  BrowserDirty := True;
-  BrowserInvalidate;
   Result := True;
+  BrowserDirty := True;
+  Control := BrowserControl(aHandle);
+  if (Control = nil) or (Control is TCustomForm) then
+    BrowserFullDamage := True
+  else if not BrowserFullDamage then
+  begin
+    Position := FindControlPositionRelativeToTheForm(Control);
+    if Rect = nil then Damage := Bounds(0, 0, Control.Width, Control.Height)
+    else Damage := Rect^;
+    OffsetRect(Damage, Position.X, Position.Y);
+    if IntersectRect(Clipped, Damage, Bounds(0, 0, BrowserWidth, BrowserHeight)) then
+    begin
+      for I := 0 to BrowserDamageCount - 1 do
+        if EqualRect(BrowserDamage[I], Clipped) then Exit;
+      if BrowserDamageCount = Length(BrowserDamage) then BrowserFullDamage := True
+      else
+      begin
+        BrowserDamage[BrowserDamageCount] := Clipped;
+        Inc(BrowserDamageCount);
+      end;
+    end;
+  end;
+  BrowserInvalidate;
 end;
+
 
 function TCDWidgetSet.MessageBox(hWnd: HWND; lpText, lpCaption: PChar; uType: Cardinal): integer;
 var
@@ -197,12 +236,8 @@ begin
   if lpText <> nil then Text := lpText;
   Caption := '';
   if lpCaption <> nil then Caption := lpCaption;
-  BrowserMessage(PChar(Text), PChar(Caption), Length(Text), Length(Caption),
+  Result := BrowserMessage(PChar(Text), PChar(Caption), Length(Text), Length(Caption),
     Integer(uType));
-  if (uType and $0000000F) = MB_YESNO then
-    Result := mrYes
-  else
-    Result := mrOk;
 end;
 
 
