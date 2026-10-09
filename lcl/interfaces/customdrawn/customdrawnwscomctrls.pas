@@ -49,6 +49,9 @@ type
   published
     class function  CreateHandle(const AWinControl: TWinControl;
           const AParams: TCreateParams): TLCLHandle; override;
+    {$ifdef CPUWASM32}
+    class procedure DestroyHandle(const AWinControl: TWinControl); override;
+    {$endif}
     class procedure ShowHide(const AWinControl: TWinControl); override;
 
     class procedure AddPage(const ATabControl: TCustomTabControl;
@@ -299,11 +302,21 @@ end;
 
 class procedure TCDWSCustomTabControl.InjectCDControl(
   const AWinControl: TWinControl; var ACDControlField: TCDControl);
+{$ifdef CPUWASM32}
+var I: Integer; Tabs: TCustomTabControl;
+{$endif}
 begin
   ACDControlField := TCDIntfPageControl.Create(AWinControl);
   TCDIntfPageControl(ACDControlField).LCLControl := TCustomTabControl(AWinControl);
   ACDControlField.Parent := AWinControl;
   ACDControlField.Align := alClient;
+  {$ifdef CPUWASM32}
+  Tabs := TCustomTabControl(AWinControl);
+  for I := 0 to Tabs.PageCount-1 do
+    if Tabs.Page[I].TabVisible then
+      TCDPageControl(ACDControlField).AddPage(Tabs.Page[I].Caption);
+  TCDPageControl(ACDControlField).PageIndex := Tabs.PageIndex;
+  {$endif}
   {$ifdef VerboseCDInjectedControlNames}ACDControlField.Name := 'CustomDrawnInternal_' + AWinControl.Name;{$endif}
 end;
 
@@ -331,6 +344,20 @@ begin
   end;
 end;
 
+{$ifdef CPUWASM32}
+class procedure TCDWSCustomTabControl.DestroyHandle(const AWinControl: TWinControl);
+var Handle: TCDWinControl; I: Integer; Tabs: TCDPageControl;
+begin
+  Handle := TCDWinControl(AWinControl.Handle);
+  if Handle.CDControl is TCDPageControl then
+  begin
+    Tabs := TCDPageControl(Handle.CDControl);
+    for I := Tabs.Tabs.Count-1 downto 0 do Tabs.GetPage(I).Free;
+  end;
+  TCDWSWinControl.DestroyHandle(AWinControl);
+end;
+{$endif}
+
 class procedure TCDWSCustomTabControl.AddPage(
   const ATabControl: TCustomTabControl; const AChild: TCustomPage;
   const AIndex: integer);
@@ -350,6 +377,9 @@ begin
   end;
 
   lCDPC := TCDPageControl(lCDWinControl.CDControl);
+  {$ifdef CPUWASM32}
+  if not ((AIndex < lCDPC.Tabs.Count) and (lCDPC.Tabs[AIndex] = AChild.Caption)) then
+  {$endif}
   lCDPC.InsertPage(AIndex, AChild.Caption);
 
   { The injected TCDIntfPageControl (alClient) draws the whole tab

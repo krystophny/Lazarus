@@ -364,6 +364,7 @@ end;
 class procedure TCDWSWinControl.DestroyHandle(const AWinControl: TWinControl);
 begin
   {$ifdef CD_Wasm}
+  TCDWinControl(AWinControl.Handle).CDControl.Free;
   TCDWinControl(AWinControl.Handle).Free;
   {$endif}
 end;
