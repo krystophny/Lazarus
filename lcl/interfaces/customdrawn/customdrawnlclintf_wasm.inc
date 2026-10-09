@@ -48,13 +48,36 @@ var
   Choices: TJSONArray;
   JSON: String;
   I: Integer;
+  function ButtonCaption(ID: Integer): String;
+  begin
+    case ID of
+      idButtonOK: Result := rsmbOK;
+      idButtonCancel: Result := rsmbCancel;
+      idButtonHelp: Result := rsmbHelp;
+      idButtonYes: Result := rsmbYes;
+      idButtonNo: Result := rsmbNo;
+      idButtonClose: Result := rsmbClose;
+      idButtonAbort: Result := rsmbAbort;
+      idButtonRetry: Result := rsmbRetry;
+      idButtonIgnore: Result := rsmbIgnore;
+      idButtonAll: Result := rsmbAll;
+      idButtonYesToAll: Result := rsmbYesToAll;
+      idButtonNoToAll: Result := rsmbNoToAll;
+      idButtonOpen: Result := rsmbOpen;
+      idButtonSave: Result := rsmbSave;
+      idButtonContinue: Result := 'Continue';
+      idButtonTryAgain: Result := 'Try again';
+    else Result := IntToStr(ID);
+    end;
+  end;
 begin
   Data := TJSONObject.Create(['kind', 'message', 'caption', DialogCaption,
     'message', DialogMessage, 'escape', EscapeResult, 'default', DefaultIndex]);
   try
     Choices := TJSONArray.Create;
     Data.Add('buttons', Choices);
-    for I := 0 to ButtonCount-1 do Choices.Add(Buttons[I]);
+    for I := 0 to ButtonCount-1 do
+      Choices.Add(TJSONObject.Create(['id', Buttons[I], 'caption', ButtonCaption(Buttons[I])]));
     JSON := Data.AsJSON;
     Result := BrowserDialog(PChar(JSON), Length(JSON));
   finally
