@@ -139,7 +139,8 @@ var
   Response: TJSONData;
   JSON: String;
   Buffer: array[0..8191] of Char;
-  Count: Integer;
+  Count, I: Integer;
+  Files: TJSONData;
   FileDialog: TFileDialog;
   FontDialog: TFontDialog;
 begin
@@ -154,6 +155,7 @@ begin
       Request.Add('filter', FileDialog.Filter);
       Request.Add('filterIndex', FileDialog.FilterIndex);
       Request.Add('defaultExt', FileDialog.DefaultExt);
+      Request.Add('multiple', ofAllowMultiSelect in TOpenDialog(FileDialog).Options);
     end
     else if ACommonDialog is TColorDialog then
     begin
@@ -168,6 +170,8 @@ begin
       Request.Add('size', FontDialog.Font.Size);
       Request.Add('bold', fsBold in FontDialog.Font.Style);
       Request.Add('italic', fsItalic in FontDialog.Font.Style);
+      Request.Add('underline', fsUnderline in FontDialog.Font.Style);
+      Request.Add('strikeout', fsStrikeOut in FontDialog.Font.Style);
     end
     else Exit;
     JSON := Request.AsJSON;
@@ -180,9 +184,11 @@ begin
       if ACommonDialog is TFileDialog then
       begin
         FileDialog.FileName := Response.FindPath('filename').AsString;
-        FileDialog.FilterIndex := Response.FindPath('filterIndex').AsInteger;
+        FileDialog.IntfFileTypeChanged(Response.FindPath('filterIndex').AsInteger);
         FileDialog.Files.Clear;
-        FileDialog.Files.Add(FileDialog.FileName);
+        Files := Response.FindPath('files');
+        if Files = nil then FileDialog.Files.Add(FileDialog.FileName)
+        else for I := 0 to Files.Count-1 do FileDialog.Files.Add(Files.Items[I].AsString);
       end
       else if ACommonDialog is TColorDialog then
         TColorDialog(ACommonDialog).Color := Response.FindPath('color').AsInteger
@@ -193,6 +199,8 @@ begin
         FontDialog.Font.Style := [];
         if Response.FindPath('bold').AsBoolean then FontDialog.Font.Style := FontDialog.Font.Style + [fsBold];
         if Response.FindPath('italic').AsBoolean then FontDialog.Font.Style := FontDialog.Font.Style + [fsItalic];
+        if Response.FindPath('underline').AsBoolean then FontDialog.Font.Style := FontDialog.Font.Style + [fsUnderline];
+        if Response.FindPath('strikeout').AsBoolean then FontDialog.Font.Style := FontDialog.Font.Style + [fsStrikeOut];
       end;
       ACommonDialog.UserChoice := mrOK;
     finally

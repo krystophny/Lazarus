@@ -337,13 +337,15 @@ end;
 
 function RegisterCustomEdit: Boolean; alias : 'WSRegisterCustomEdit';
 begin
-  RegisterWSComponent(TCustomEdit, TCDWSCustomEdit);
+  {$ifdef CPUWASM32}RegisterWSComponent(TCustomEdit, TBrowserWSEdit);
+  {$else}RegisterWSComponent(TCustomEdit, TCDWSCustomEdit);{$endif}
   Result := True;
 end;
 
 function RegisterCustomMemo: Boolean; alias : 'WSRegisterCustomMemo';
 begin
-  RegisterWSComponent(TCustomMemo, TCDWSCustomMemo);
+  {$ifdef CPUWASM32}RegisterWSComponent(TCustomMemo, TBrowserWSMemo);
+  {$else}RegisterWSComponent(TCustomMemo, TCDWSCustomMemo);{$endif}
   Result := True;
 end;
 

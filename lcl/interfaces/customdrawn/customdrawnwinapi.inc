@@ -539,6 +539,15 @@ begin
     SizeInPoints stays 0 and the FreeType font measures every glyph as
     ~2 px -- breaking AutoSize, GetTextMetrics, and anything else that
     asks for text dimensions before a paint cycle has run. }
+  {$ifdef CD_Wasm}
+  if LongFontName <> '' then lFont.Name := LongFontName
+  else lFont.Name := StrPas(LogFont.lfFaceName);
+  lFont.Bold := LogFont.lfWeight >= FW_BOLD;
+  lFont.Italic := LogFont.lfItalic <> 0;
+  lFont.Underline := LogFont.lfUnderline <> 0;
+  lFont.StrikeThrough := LogFont.lfStrikeOut <> 0;
+  lFont.Angle := LogFont.lfEscapement;
+  {$endif}
   lFont.Size := Abs(LogFont.lfHeight);
   if lFont.Size = 0 then
     lFont.Size := 10;   { LCL convention: default UI font is 10 pt }
@@ -5555,6 +5564,10 @@ begin
     //Result := BackendSetFocus(hWnd);
 
     if lHandle.WinControl = nil then Exit;
+    {$ifdef CD_Wasm}
+    if lHandle.BrowserDOM then CDSetFocusToControl(lHandle.WinControl, nil)
+    else
+    {$endif}
     CDSetFocusToControl(lHandle.WinControl, lHandle.CDControl);
 
     {$ifdef VerboseCDFocus}

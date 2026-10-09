@@ -13,7 +13,12 @@ begin
   try
     Choices := TJSONArray.Create;
     Data.Add('buttons', Choices);
-    for I := 0 to Buttons.Count-1 do Choices.Add(Buttons[I].ModalResult);
+    for I := 0 to Buttons.Count-1 do
+    begin
+      Choices.Add(TJSONObject.Create(['id', Buttons[I].ModalResult, 'caption', Buttons[I].Caption]));
+      if Buttons[I].Default then Data.Add('default', I);
+      if Buttons[I].Cancel then Data.Add('escape', Buttons[I].ModalResult);
+    end;
     JSON := Data.AsJSON;
     Result := BrowserDialog(PChar(JSON), Length(JSON));
   finally
@@ -58,8 +63,16 @@ begin
 end;
 
 function TCDWidgetSet.RawImage_FromDevice(out ARawImage: TRawImage; ADC: HDC; const ARect: TRect): Boolean;
+var
+  Source: TRawImage;
+  Clip: TRect;
 begin
-  raise ENotSupportedException.Create('CustomDrawn WASM: RawImage_FromDevice is not implemented');
+  ARawImage.Init;
+  Result := IsValidDC(ADC);
+  if not Result then Exit;
+  TLazIntfImage(TLazCanvas(ADC).Image).GetRawImage(Source);
+  Result := IntersectRect(Clip, ARect, Bounds(0, 0, Source.Description.Width, Source.Description.Height));
+  if Result then Source.ExtractRect(Clip, ARawImage);
 end;
 
 

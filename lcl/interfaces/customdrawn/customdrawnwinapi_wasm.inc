@@ -3,10 +3,21 @@
 
 
 function BrowserFontSize(DC: HDC): Integer;
+var
+  Canvas: TLazCanvas;
+  Style, Angle: Integer;
+  Name: String;
 begin
   if DC = 0 then DC := HDC(CDWidgetSet.ScreenDC);
-  Result := Abs(TLazCanvas(DC).Font.Size);
+  Canvas := TLazCanvas(DC);
+  Result := Abs(Canvas.Font.Size);
   if Result = 0 then Result := 13;
+  Name := Canvas.Font.Name;
+  Style := Ord(Canvas.Font.Bold) or (Ord(Canvas.Font.Italic) shl 1)
+    or (Ord(Canvas.Font.Underline) shl 2) or (Ord(Canvas.Font.StrikeThrough) shl 3);
+  Angle := 0;
+  if Canvas.AssignedFont is TLazCDCustomFont then Angle := TLazCDCustomFont(Canvas.AssignedFont).Angle;
+  BrowserFont(PChar(Name), Length(Name), Result, Style, Angle);
 end;
 
 function BrowserControl(Handle: HWND): TWinControl;

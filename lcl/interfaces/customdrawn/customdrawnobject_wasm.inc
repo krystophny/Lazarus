@@ -11,6 +11,7 @@ function BrowserDialog(Data: PChar; Count: LongInt): LongInt; external 'lcl' nam
 procedure BrowserMenus(Data: PChar; Count: LongInt); external 'lcl' name 'menus';
 function BrowserTimer(Handle, Interval: LongInt): LongInt; external 'lcl' name 'timer';
 procedure BrowserClearTimer(Handle: LongInt); external 'lcl' name 'clear_timer';
+procedure BrowserFont(Name: PChar; Count, Size, Style, Angle: LongInt); external 'lcl' name 'font';
 function BrowserMeasure(Text: PChar; Count, FontSize: LongInt): LongInt; external 'lcl' name 'measure';
 procedure BrowserText(Data: Pointer; Width, Height, X, Y: LongInt;
   Text: PChar; Count, FontSize, Color, ClipLeft, ClipTop, ClipRight, ClipBottom: LongInt);
@@ -141,6 +142,11 @@ begin
   Item.Click;
   LCLWasmIdle;
   SyncBrowserMenus;
+end;
+
+procedure LCLWasmFocus(Handle: LongInt); cdecl;
+begin
+  FocusBrowserDOMControl(PtrUInt(Handle));
 end;
 
 procedure LCLWasmControl(Handle: LongInt); cdecl;

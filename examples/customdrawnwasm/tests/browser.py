@@ -2,7 +2,8 @@
 """Behavioral browser checks against the ordinary Pascal demo's visible output."""
 import argparse
 import json
-from playwright.sync_api import sync_playwright
+import re
+from playwright.sync_api import expect, sync_playwright
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--url', default='http://127.0.0.1:8765/')
@@ -27,13 +28,18 @@ with sync_playwright() as p:
     def pixel(x, y):
         return page.evaluate('([x,y]) => Array.from(document.querySelector("#lcl").getContext("2d").getImageData(x,y,1,1).data)', [x, y])
 
-    count = page.get_by_role('button', name='Count: 0', exact=True)
+    def wait_pixel(x, y, color):
+        page.wait_for_function('''([x,y,color]) => {
+            const p = document.querySelector('#lcl').getContext('2d').getImageData(x,y,1,1).data;
+            return color.every((v,i) => p[i] === v);
+        }''', arg=[x, y, color])
+
+    count = page.get_by_role('button', name=re.compile(r'^Count: \d+$'))
     count.click()
-    page.wait_for_function('document.querySelector("#lcl-CounterButton").textContent === "Count: 1"')
-    count = page.locator('#lcl-CounterButton')
+    expect(count).to_have_text('Count: 1')
     count.focus()
     page.keyboard.press('Enter')
-    page.wait_for_function('document.querySelector("#lcl-CounterButton").textContent === "Count: 2"')
+    expect(count).to_have_text('Count: 2')
     assert count.evaluate('(el) => el === document.activeElement'), 'Repaint stole DOM focus'
 
     # The LFM/Pascal specifies light blue RGB(175,207,234), not a host-generated shape.
@@ -43,11 +49,13 @@ with sync_playwright() as p:
     checkbox.focus()
     page.keyboard.press('Space')
     painted_after(old)
+    wait_pixel(158, 263, [255, 255, 255, 255])
     assert not checkbox.is_checked()
     assert pixel(158, 263) == [255, 255, 255, 255]
     old = frame()
     checkbox.click()
     painted_after(old)
+    wait_pixel(158, 263, [175, 207, 234, 255])
     assert checkbox.is_checked()
     assert pixel(158, 263) == [175, 207, 234, 255]
 
@@ -66,7 +74,7 @@ with sync_playwright() as p:
     count.focus()
     for _ in range(100):
         page.keyboard.press('Enter')
-    page.wait_for_function('document.querySelector("#lcl-CounterButton").textContent === "Count: 100"')
+    expect(count).to_have_text('Count: 100')
     after = page.evaluate('({live:jobHost.live(),slots:jobHost.slots()})')
     assert after['live'] == before['live'], (before, after)
     assert after['slots'] <= before['slots']+2, (before, after)
