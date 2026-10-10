@@ -25,16 +25,51 @@ object DemoForm: TDemoForm
     OnClick = ResetButtonClick
     TabOrder = 1
   end
+  object SaveFileButton: TButton
+    Left = 600
+    Top = 24
+    Width = 100
+    Height = 44
+    Caption = 'Save file'
+    OnClick = SaveFileButtonClick
+    TabOrder = 2
+  end
+  object SaveAgainButton: TButton
+    Left = 480
+    Top = 24
+    Width = 100
+    Height = 44
+    Caption = 'Save again'
+    Enabled = False
+    OnClick = SaveAgainButtonClick
+    TabOrder = 3
+  end
+  object AtomicRenameCheckBox: TCheckBox
+    Left = 580
+    Top = 82
+    Width = 130
+    Height = 30
+    Caption = 'Atomic rename'
+    TabOrder = 4
+  end
+  object FailRenameCheckBox: TCheckBox
+    Left = 580
+    Top = 112
+    Width = 130
+    Height = 30
+    Caption = 'Fail rename'
+    TabOrder = 5
+  end
   object FilledCheckBox: TCheckBox
     Left = 344
     Top = 30
-    Width = 250
+    Width = 130
     Height = 36
     Caption = 'Filled shape'
     Checked = True
     State = cbChecked
     OnChange = FilledCheckBoxChange
-    TabOrder = 2
+    TabOrder = 6
   end
   object HintLabel: TLabel
     Left = 24

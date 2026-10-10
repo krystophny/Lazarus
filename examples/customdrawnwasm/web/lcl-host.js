@@ -45,6 +45,21 @@ let activeForm = 0;
 let pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
+const normalizeVirtualPath = path => path.replace(/^\/+/, '');
+function virtualFile(path) {
+  let entry = fileSystem.dir;
+  for (const part of normalizeVirtualPath(path).split('/')) {
+    if (!part) continue;
+    entry = entry?.contents?.get(part);
+    if (!entry) return null;
+  }
+  return entry;
+}
+function downloadPendingFile(name, file) {
+  if (!file?.data || !downloadPaths.has(name)) return false;
+  download(name, file.data.slice());
+  return true;
+}
 let instance, ready = false, scheduled = false, paintRequested = false, pendingMove = null;
 const text = (pointer, length) => decoder.decode(new Uint8Array(instance.exports.memory.buffer, pointer, length));
 function fail(error) {
@@ -527,17 +542,24 @@ async function start() {
   const wasiImports = {...wasi.wasiImport};
   const paths=new Map(), written=new Set();
   const open=wasiImports.path_open, write=wasiImports.fd_write, close=wasiImports.fd_close;
+  const rename=wasiImports.path_rename;
   wasiImports.path_open=(...args)=>{
-    const name=text(args[2],args[3]).replace(/^\/+/, '');
+    const name=normalizeVirtualPath(text(args[2],args[3]));
     const result=open(...args);
     if (!result) paths.set(new DataView(instance.exports.memory.buffer).getUint32(args[8],true),name);
+    return result;
+  };
+  wasiImports.path_rename=(...args)=>{
+    const name=normalizeVirtualPath(text(args[4],args[5]));
+    const result=rename(...args);
+    if (result===0) downloadPendingFile(name,virtualFile(name));
     return result;
   };
   wasiImports.fd_write=(fd,...args)=>{const result=write(fd,...args);if (!result) written.add(fd);return result;};
   wasiImports.fd_close=fd=>{
     const name=paths.get(fd), file=wasi.fds[fd]?.file;
     const result=close(fd);
-    if (!result && written.has(fd) && downloadPaths.has(name) && file) download(name,file.data.slice());
+    if (!result && written.has(fd)) downloadPendingFile(name,file);
     written.delete(fd);paths.delete(fd);return result;
   };
   const response = await fetch(moduleURL);

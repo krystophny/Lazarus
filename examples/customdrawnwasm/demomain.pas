@@ -3,16 +3,23 @@
 unit DemoMain;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, Types;
+uses Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, Types,
+  Dialogs;
 type
   TDemoForm = class(TForm)
     CounterButton: TButton;
     ResetButton: TButton;
+    SaveFileButton: TButton;
+    SaveAgainButton: TButton;
     FilledCheckBox: TCheckBox;
+    AtomicRenameCheckBox: TCheckBox;
+    FailRenameCheckBox: TCheckBox;
     Drawing: TPaintBox;
     HintLabel: TLabel;
     procedure CounterButtonClick(Sender: TObject);
     procedure ResetButtonClick(Sender: TObject);
+    procedure SaveFileButtonClick(Sender: TObject);
+    procedure SaveAgainButtonClick(Sender: TObject);
     procedure FilledCheckBoxChange(Sender: TObject);
     procedure DrawingPaint(Sender: TObject);
     procedure DrawingMouseDown(Sender: TObject; Button: TMouseButton;
@@ -20,6 +27,10 @@ type
   private
     FCount, FMarkerX, FMarkerY: Integer;
     FHasMarker: Boolean;
+    FLastSaveFileName: string;
+    FLastSaveAtomic: Boolean;
+    function WriteBrowserFile(const FileName: string; Atomic,
+      FailRename: Boolean): Boolean;
   end;
 var
   DemoForm: TDemoForm;
@@ -36,6 +47,77 @@ begin
   FHasMarker := False;
   CounterButton.Caption := 'Count: 0';
   Drawing.Invalidate;
+end;
+procedure TDemoForm.SaveFileButtonClick(Sender: TObject);
+var
+  Dialog: TSaveDialog;
+  FileName: string;
+  Atomic: Boolean;
+begin
+  Dialog := TSaveDialog.Create(Self);
+  try
+    Dialog.Title := 'Save browser file';
+    Dialog.Filter := 'Text files (*.txt)|*.txt';
+    Dialog.DefaultExt := 'txt';
+    Dialog.FileName := 'download.txt';
+    if not Dialog.Execute then Exit;
+    FileName := Dialog.FileName;
+    Atomic := AtomicRenameCheckBox.Checked;
+    if WriteBrowserFile(FileName, Atomic, FailRenameCheckBox.Checked) then
+    begin
+      FLastSaveFileName := FileName;
+      FLastSaveAtomic := Atomic;
+      SaveAgainButton.Enabled := True;
+    end;
+  finally
+    Dialog.Free;
+  end;
+end;
+
+procedure TDemoForm.SaveAgainButtonClick(Sender: TObject);
+begin
+  if FLastSaveFileName <> '' then
+    WriteBrowserFile(FLastSaveFileName, FLastSaveAtomic, False);
+end;
+
+function TDemoForm.WriteBrowserFile(const FileName: string; Atomic,
+  FailRename: Boolean): Boolean;
+var
+  StagedFileName: string;
+  Payload: RawByteString;
+  Stream: TFileStream;
+begin
+  Result := False;
+  if FailRename then
+  begin
+    StagedFileName := FileName + '.stage';
+    if RenameFile(StagedFileName, FileName) then
+      raise Exception.Create('Unexpectedly renamed a missing staged file');
+    Exit;
+  end;
+  Payload := 'WASI browser save payload'#10;
+  if Atomic then
+  begin
+    StagedFileName := FileName + '.stage';
+    Stream := TFileStream.Create(StagedFileName, fmCreate);
+    try
+      Stream.WriteBuffer(Payload[1], Length(Payload));
+    finally
+      Stream.Free;
+    end;
+    if not RenameFile(StagedFileName, FileName) then
+      raise Exception.Create('Could not commit staged browser file');
+  end
+  else
+  begin
+    Stream := TFileStream.Create(FileName, fmCreate);
+    try
+      Stream.WriteBuffer(Payload[1], Length(Payload));
+    finally
+      Stream.Free;
+    end;
+  end;
+  Result := True;
 end;
 procedure TDemoForm.FilledCheckBoxChange(Sender: TObject);
 begin
