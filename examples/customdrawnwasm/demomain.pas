@@ -25,6 +25,8 @@ type
     SaveFileButton: TButton;
     SaveAgainButton: TButton;
     CompositionSaveButton: TButton;
+    DestroyMemoButton: TButton;
+    SetMemoTextButton: TButton;
     FilledCheckBox: TCheckBox;
     AtomicRenameCheckBox: TCheckBox;
     FailRenameCheckBox: TCheckBox;
@@ -39,6 +41,10 @@ type
     procedure SaveFileButtonClick(Sender: TObject);
     procedure SaveAgainButtonClick(Sender: TObject);
     procedure CompositionSaveButtonClick(Sender: TObject);
+    procedure DestroyMemoButtonClick(Sender: TObject);
+    procedure SetMemoTextButtonClick(Sender: TObject);
+    procedure RecreateMemoButtonClick(Sender: TObject);
+    procedure DemoFormCreate(Sender: TObject);
     procedure FilledCheckBoxChange(Sender: TObject);
     procedure DrawingPaint(Sender: TObject);
     procedure DrawingMouseDown(Sender: TObject; Button: TMouseButton;
@@ -51,6 +57,7 @@ type
     FCount, FMarkerX, FMarkerY: Integer;
     FHasMarker: Boolean;
     FCompositionSavePending: Boolean;
+    FDestroyMemoOnChange: Boolean;
     FLastSaveFileName: string;
     FLastSaveAtomic: Boolean;
     function WriteBrowserFile(const FileName: string; Atomic,
@@ -60,6 +67,12 @@ var
   DemoForm: TDemoForm;
 implementation
 {$R *.lfm}
+
+function DisplayMemoText(const Value: String): String;
+begin
+  Result := StringReplace(Value, #13, '<CR>', [rfReplaceAll]);
+  Result := StringReplace(Result, #10, '<LF>', [rfReplaceAll]);
+end;
 
 procedure TCompositionMemo.IMComposition(var Msg: TLMessage);
 var
@@ -189,8 +202,17 @@ begin
 end;
 
 procedure TDemoForm.CompositionMemoChange(Sender: TObject);
+var
+  MemoText: String;
 begin
-  CompositionValue.Text := 'Value: ' + CompositionMemo.Text;
+  MemoText := CompositionMemo.Text;
+  CompositionValue.Text := 'Value: ' + DisplayMemoText(MemoText);
+  if FDestroyMemoOnChange then
+  begin
+    FDestroyMemoOnChange := False;
+    FreeAndNil(CompositionMemo);
+    CompositionValue.Text := 'Memo destroyed';
+  end;
 end;
 
 procedure TDemoForm.CompositionMemoCompositionChange(Sender: TObject);
@@ -201,10 +223,16 @@ begin
     CompositionStatus.Text := 'Composition: idle';
     if FCompositionSavePending then
     begin
-      CompositionSaved.Text := 'Saved: ' + CompositionMemo.Text;
+      CompositionSaved.Text := 'Saved: ' + DisplayMemoText(CompositionMemo.Text);
       FCompositionSavePending := False;
     end;
   end;
+end;
+
+procedure TDemoForm.DestroyMemoButtonClick(Sender: TObject);
+begin
+  FDestroyMemoOnChange := True;
+  CompositionValue.Text := 'Destroy on next change';
 end;
 
 procedure TDemoForm.CompositionSaveButtonClick(Sender: TObject);
@@ -215,7 +243,48 @@ begin
     CompositionSaved.Text := 'Save pending';
   end
   else
-    CompositionSaved.Text := 'Saved: ' + CompositionMemo.Text;
+    CompositionSaved.Text := 'Saved: ' + DisplayMemoText(CompositionMemo.Text);
+end;
+
+procedure TDemoForm.SetMemoTextButtonClick(Sender: TObject);
+begin
+  CompositionMemo.Text := 'setter' + LineEnding;
+  CompositionValue.Text := 'Value: ' + DisplayMemoText(CompositionMemo.Text);
+end;
+
+procedure TDemoForm.RecreateMemoButtonClick(Sender: TObject);
+var
+  MemoText: String;
+begin
+  MemoText := CompositionMemo.Text;
+  RecreateWnd(CompositionMemo);
+  if CompositionMemo.Text <> MemoText then
+    raise Exception.Create('Memo Text changed during handle recreation');
+  CompositionValue.Text := 'Value: ' + DisplayMemoText(CompositionMemo.Text);
+end;
+
+procedure TDemoForm.DemoFormCreate(Sender: TObject);
+var
+  ProbeMemo: TMemo;
+  ExpectedText: String;
+begin
+  ExpectedText := 'unhandled' + LineEnding;
+  ProbeMemo := TMemo.Create(nil);
+  try
+    ProbeMemo.Text := ExpectedText;
+    if ProbeMemo.HandleAllocated or (ProbeMemo.Text <> ExpectedText) then
+      raise Exception.Create('Unhandled memo Text did not preserve its value');
+  finally
+    ProbeMemo.Free;
+  end;
+
+  ExpectedText := 'seed' + LineEnding;
+  if CompositionMemo.HandleAllocated then
+    raise Exception.Create('Memo handle was allocated before OnCreate');
+  CompositionMemo.Text := ExpectedText;
+  if CompositionMemo.Text <> ExpectedText then
+    raise Exception.Create('Pre-handle memo Text setter lost its value');
+  CompositionValue.Text := 'Value: ' + DisplayMemoText(CompositionMemo.Text);
 end;
 
 procedure TDemoForm.CompositionMemoKeyDown(Sender: TObject; var Key: Word;

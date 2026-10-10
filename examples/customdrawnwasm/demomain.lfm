@@ -4,6 +4,7 @@ object DemoForm: TDemoForm
   Width = 720
   Height = 480
   Caption = 'LCL WebAssembly experiment'
+  OnCreate = DemoFormCreate
   Color = clBtnFace
   Font.Height = -18
   DesignTimePPI = 96
@@ -79,6 +80,33 @@ object DemoForm: TDemoForm
     Caption = 'Save text'
     OnClick = CompositionSaveButtonClick
     TabOrder = 7
+  end
+  object DestroyMemoButton: TButton
+    Left = 156
+    Top = 72
+    Width = 136
+    Height = 24
+    Caption = 'Destroy on change'
+    OnClick = DestroyMemoButtonClick
+    TabOrder = 9
+  end
+  object SetMemoTextButton: TButton
+    Left = 300
+    Top = 72
+    Width = 96
+    Height = 24
+    Caption = 'Set memo text'
+    OnClick = SetMemoTextButtonClick
+    TabOrder = 10
+  end
+  object RecreateMemoButton: TButton
+    Left = 404
+    Top = 72
+    Width = 112
+    Height = 24
+    Caption = 'Recreate memo'
+    OnClick = RecreateMemoButtonClick
+    TabOrder = 11
   end
   object HintLabel: TLabel
     Left = 344

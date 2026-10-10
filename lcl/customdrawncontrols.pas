@@ -257,6 +257,10 @@ type
     function GetCurrentLine(): string;
     procedure SetCurrentLine(AStr: string);
     function IsSomethingSelected: Boolean;
+    { The WASI memo shares this Lines list with TCustomMemo. When LCL has
+      already released its memo-side reference during destruction, detach the
+      stale widgetset pointer so TCDEdit does not release the same list twice. }
+    procedure DetachLines;
     { Replace any selected text with empty and clear the selection
       state. Used before external text edits that must operate on the
       post-selection buffer. }
@@ -1692,6 +1696,12 @@ begin
   if FEditState.LeftTextMargin = AValue then Exit;
   FEditState.LeftTextMargin := AValue;
   Invalidate;
+end;
+
+procedure TCDEdit.DetachLines;
+begin
+  FLines := nil;
+  FEditState.Lines := nil;
 end;
 
 procedure TCDEdit.SetLines(AValue: TStrings);

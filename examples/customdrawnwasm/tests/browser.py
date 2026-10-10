@@ -38,7 +38,7 @@ with sync_playwright() as p:
             data:'かな😀', isComposing:true}));
     }''')
     expect(composition).to_have_value('Composition: active')
-    expect(value).to_have_value('Value: seed')
+    expect(value).to_have_value('Value: seed<LF>')
     page.get_by_role('button', name='Save text', exact=True).click()
     expect(saved_text).to_have_value('Save pending')
     memo.evaluate("el => el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'かな😀'}))")
@@ -48,6 +48,29 @@ with sync_playwright() as p:
     memo.focus()
     page.keyboard.press('Control+Enter')
     expect(composition).to_have_value('Ctrl+Enter routed')
+    page.get_by_role('button', name='Set memo text', exact=True).click()
+    expect(memo).to_have_value('setter\n')
+    expect(value).to_have_value('Value: setter<LF>')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Saved: setter<LF>')
+    page.get_by_role('button', name='Recreate memo', exact=True).click()
+    expect(memo).to_have_value('setter\n')
+    expect(value).to_have_value('Value: setter<LF>')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Saved: setter<LF>')
+    for memo_text in ['', 'alpha', 'alpha\nbeta', 'alpha\n', 'alpha\nbeta\n']:
+        memo.evaluate('''(el, value) => {
+            el.value = value;
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+        }''', memo_text)
+        expect(memo).to_have_value(memo_text)
+        value_text = memo_text.replace('\r', '<CR>').replace('\n', '<LF>')
+        expect(value).to_have_value('Value: ' + value_text)
+        page.get_by_role('button', name='Save text', exact=True).click()
+        expect(saved_text).to_have_value('Saved: ' + value_text)
+    page.get_by_role('button', name='Destroy on change', exact=True).click()
+    memo.evaluate("el => { el.value = 'destroy'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+    expect(value).to_have_value('Memo destroyed')
 
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')
