@@ -1,7 +1,7 @@
 # CustomDrawn WASI browser backend
 
 This example runs an ordinary LCL form from `demomain.lfm` in a browser.
-The Pascal application uses `TButton`, `TCheckBox`, `TLabel`, `TPaintBox` and
+The Pascal application uses `TButton`, `TCheckBox`, `TSaveDialog`, `TLabel`, `TPaintBox` and
 normal event handlers. The experimental widgetset supplies DOM buttons and
 checkboxes through Free Pascal's JS Object Bridge (JOB), while existing
 CustomDrawn/LazCanvas code paints the label and drawing area.
@@ -70,8 +70,10 @@ The checks use observable behavior: mouse and Enter activate the Pascal counter;
 Space and pointer clicks change checkbox state and the painted ellipse; a canvas
 click places the Pascal marker; Reset clears it. Exact RGB pixels check the raw
 image byte order. A platform resize exercises the form's existing Anchors, and
-100 activation callbacks must keep JOB's live-object count constant. These
-checks run against a real headless Chromium instance.
+100 activation callbacks must keep JOB's live-object count constant. The Save
+file control checks direct downloads and downloads after a staged file is
+committed with an atomic rename. These checks run against a real headless
+Chromium instance.
 
 ## Application showcase and scope
 

@@ -3,16 +3,20 @@
 unit DemoMain;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, Types;
+uses Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, Types,
+  Dialogs;
 type
   TDemoForm = class(TForm)
     CounterButton: TButton;
     ResetButton: TButton;
+    SaveFileButton: TButton;
     FilledCheckBox: TCheckBox;
+    AtomicRenameCheckBox: TCheckBox;
     Drawing: TPaintBox;
     HintLabel: TLabel;
     procedure CounterButtonClick(Sender: TObject);
     procedure ResetButtonClick(Sender: TObject);
+    procedure SaveFileButtonClick(Sender: TObject);
     procedure FilledCheckBoxChange(Sender: TObject);
     procedure DrawingPaint(Sender: TObject);
     procedure DrawingMouseDown(Sender: TObject; Button: TMouseButton;
@@ -36,6 +40,52 @@ begin
   FHasMarker := False;
   CounterButton.Caption := 'Count: 0';
   Drawing.Invalidate;
+end;
+procedure TDemoForm.SaveFileButtonClick(Sender: TObject);
+var
+  Dialog: TSaveDialog;
+  FileName, StagedFileName: string;
+  Payload: RawByteString;
+  Stream: TFileStream;
+begin
+  Dialog := TSaveDialog.Create(Self);
+  try
+    Dialog.Title := 'Save browser file';
+    Dialog.Filter := 'Text files (*.txt)|*.txt';
+    Dialog.DefaultExt := 'txt';
+    Dialog.FileName := 'download.txt';
+    if not Dialog.Execute then Exit;
+    FileName := Dialog.FileName;
+    if SameText(ExtractFileName(FileName), 'failed.txt') then
+    begin
+      RenameFile(FileName + '.missing', FileName);
+      Exit;
+    end;
+    Payload := 'WASI browser save payload'#10;
+    if AtomicRenameCheckBox.Checked then
+    begin
+      StagedFileName := FileName + '.stage';
+      Stream := TFileStream.Create(StagedFileName, fmCreate);
+      try
+        Stream.WriteBuffer(Payload[1], Length(Payload));
+      finally
+        Stream.Free;
+      end;
+      if not RenameFile(StagedFileName, FileName) then
+        raise Exception.Create('Could not commit staged browser file');
+    end
+    else
+    begin
+      Stream := TFileStream.Create(FileName, fmCreate);
+      try
+        Stream.WriteBuffer(Payload[1], Length(Payload));
+      finally
+        Stream.Free;
+      end;
+    end;
+  finally
+    Dialog.Free;
+  end;
 end;
 procedure TDemoForm.FilledCheckBoxChange(Sender: TObject);
 begin

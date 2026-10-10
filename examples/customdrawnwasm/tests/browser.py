@@ -3,7 +3,8 @@
 import argparse
 import json
 import re
-from playwright.sync_api import expect, sync_playwright
+from pathlib import Path
+from playwright.sync_api import expect, sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--url', default='http://127.0.0.1:8765/')
@@ -86,9 +87,38 @@ with sync_playwright() as p:
     painted_after(old)
     assert page.locator('#lcl').get_attribute('width') == '800'
     assert pixel(760, 490) == [255, 255, 255, 255], pixel(760, 490)
+
+    save_button = page.get_by_role('button', name='Save file', exact=True)
+    atomic = page.get_by_role('checkbox', name='Atomic rename', exact=True)
+    payload = b'WASI browser save payload\n'
+    for name, use_atomic in [('direct.txt', False), ('atomic.txt', True)]:
+        atomic.set_checked(use_atomic)
+        save_button.click()
+        dialog = page.get_by_role('dialog')
+        dialog.get_by_label('File name').fill(name)
+        with page.expect_download() as pending:
+            dialog.get_by_role('button', name='OK', exact=True).click()
+        saved = pending.value
+        assert saved.suggested_filename == name, saved.suggested_filename
+        assert Path(saved.path()).read_bytes() == payload
+
+    atomic.check()
+    save_button.click()
+    dialog = page.get_by_role('dialog')
+    dialog.get_by_label('File name').fill('failed.txt')
+    try:
+        with page.expect_download(timeout=750):
+            dialog.get_by_role('button', name='OK', exact=True).click()
+    except PlaywrightTimeoutError:
+        pass
+    else:
+        raise AssertionError('failed staged rename produced a download')
+    assert page.locator('#status').get_attribute('data-state') == 'ready'
     assert not errors, errors
     print(json.dumps({'dom_mouse_and_keyboard': True, 'pascal_canvas_colors': True,
                       'checkbox_changes_lcl_paint': True, 'canvas_pointer_and_reset': True,
                       'anchored_resize': True, 'callback_cycles': 100,
+                      'direct_download': True, 'atomic_rename_download': True,
+                      'failed_rename_no_download': True,
                       'job_before': before, 'job_after': after}))
     browser.close()
