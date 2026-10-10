@@ -45,6 +45,8 @@ let activeForm = 0;
 let pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
+// Explicit document saves group the main source and linked assets into one action.
+let activeDownloadBundle = null;
 const normalizeVirtualPath = path => path.replace(/^\/+/, '');
 function virtualFile(path) {
   let entry = fileSystem.dir;
@@ -56,9 +58,38 @@ function virtualFile(path) {
   return entry;
 }
 function downloadPendingFile(name, file) {
+  if (activeDownloadBundle) return false;
   if (!file?.data || !downloadPaths.has(name)) return false;
-  download(name, file.data.slice());
+  try { return download(name, file.data.slice()); }
+  catch { return false; }
+}
+function beginDownloadBundle(name) {
+  if (activeDownloadBundle) return false;
+  const path = normalizeVirtualPath(name);
+  if (!path || path.includes('/') || path.includes('\\')) return false;
+  activeDownloadBundle = {paths: [path]};
   return true;
+}
+function addDownloadBundlePath(name) {
+  if (!activeDownloadBundle) return false;
+  const path = normalizeVirtualPath(name);
+  if (!path || path.includes('/') || path.includes('\\')) return false;
+  if (!activeDownloadBundle.paths.includes(path)) activeDownloadBundle.paths.push(path);
+  return true;
+}
+function finishDownloadBundle(success) {
+  const bundle = activeDownloadBundle;
+  activeDownloadBundle = null;
+  if (!bundle || !success) return false;
+  // Verify every VFS path before starting any member of the download bundle.
+  const files = bundle.paths.map(path => ({path, file: virtualFile(path)}));
+  if (files.some(item => !item.file?.data)) return false;
+  try {
+    for (const item of files) download(item.path, item.file.data.slice());
+    return true;
+  } catch {
+    return false;
+  }
 }
 let instance, ready = false, scheduled = false, paintRequested = false, pendingMove = null;
 const text = (pointer, length) => decoder.decode(new Uint8Array(instance.exports.memory.buffer, pointer, length));
@@ -380,9 +411,25 @@ function commonDialog(options) {
     dialog.showModal();
   });
 }
+function downloadMimeType(name) {
+  const extension = name.split('.').pop().toLowerCase();
+  return ({tpx:'application/xml',xml:'application/xml',svg:'image/svg+xml',
+    eps:'application/postscript',ps:'application/postscript',pdf:'application/pdf',
+    png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',
+    bmp:'image/bmp',tif:'image/tiff',tiff:'image/tiff',webp:'image/webp',
+    tex:'text/plain',mp:'text/plain',tikz:'text/plain'})[extension] || 'application/octet-stream';
+}
 function download(name, bytes) {
-  const url=URL.createObjectURL(new Blob([bytes])); const link=document.createElement('a');
-  link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  let url = '', link;
+  try {
+    url=URL.createObjectURL(new Blob([bytes], {type: downloadMimeType(name)}));
+    link=document.createElement('a');
+    link.href=url;link.download=name;document.body.append(link);link.click();
+    return true;
+  } finally {
+    link?.remove();
+    if (url) setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
 }
 let previousMenus = '';
 function updateMenus(json) {
@@ -571,6 +618,8 @@ async function start() {
   if (missing.length) throw new Error(`Missing WASI services: ${missing.map(i=>i.name).join(', ')}`);
   const applicationImports = createImports?.({
     memory: () => instance.exports.memory,
+    downloads: {begin: beginDownloadBundle, add: addDownloadBundlePath,
+      finish: finishDownloadBundle},
     call: (name, ...args) => {
       if (ready) guarded(async () => { await api[name](...args); wakeMessage(); });
     }
