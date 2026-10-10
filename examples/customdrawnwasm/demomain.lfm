@@ -71,19 +71,68 @@ object DemoForm: TDemoForm
     OnChange = FilledCheckBoxChange
     TabOrder = 6
   end
-  object HintLabel: TLabel
+  object CompositionSaveButton: TButton
     Left = 24
-    Top = 94
-    Width = 550
+    Top = 72
+    Width = 120
+    Height = 24
+    Caption = 'Save text'
+    OnClick = CompositionSaveButtonClick
+    TabOrder = 7
+  end
+  object HintLabel: TLabel
+    Left = 344
+    Top = 156
+    Width = 356
     Height = 26
     AutoSize = False
     Caption = 'Click below to place a green marker. Reset clears it.'
   end
+  object CompositionMemo: TCompositionMemo
+    Left = 24
+    Top = 96
+    Width = 300
+    Height = 44
+    Lines.Strings = (
+      'seed'
+    )
+    OnChange = CompositionMemoChange
+    OnCompositionChange = CompositionMemoCompositionChange
+    OnKeyDown = CompositionMemoKeyDown
+    TabOrder = 8
+  end
+  object CompositionStatus: TEdit
+    Left = 344
+    Top = 96
+    Width = 220
+    Height = 26
+    ReadOnly = True
+    Text = 'Composition: idle'
+    Hint = 'Composition status'
+  end
+  object CompositionValue: TEdit
+    Left = 344
+    Top = 126
+    Width = 220
+    Height = 26
+    ReadOnly = True
+    Text = 'Value: seed'
+    Hint = 'Composition value'
+  end
+  object CompositionSaved: TEdit
+    Left = 24
+    Top = 150
+    Width = 300
+    Height = 26
+    ReadOnly = True
+    Text = 'Saved: none'
+    Hint = 'Saved text'
+  end
   object Drawing: TPaintBox
     Left = 24
-    Top = 144
+    Top = 184
     Width = 672
-    Height = 312
+    Height = 272
     Anchors = [akTop, akLeft, akRight, akBottom]
     OnPaint = DrawingPaint
     OnMouseDown = DrawingMouseDown

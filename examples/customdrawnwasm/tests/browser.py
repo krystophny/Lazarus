@@ -20,6 +20,35 @@ with sync_playwright() as p:
     page.wait_for_selector('#status[data-state=ready]')
     page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
 
+    # A real LCL memo is backed by a DOM textarea. Composition is held outside
+    # the Pascal value until compositionend, then the committed Unicode value is
+    # delivered before Ctrl+Enter is routed through the LCL key callback.
+    memo = page.locator('#lcl-dom textarea')
+    expect(memo).to_have_value('seed\n')
+    composition = page.get_by_label('Composition status')
+    value = page.get_by_label('Composition value')
+    saved_text = page.get_by_label('Saved text')
+    expect(composition).to_have_value('Composition: idle')
+    expect(saved_text).to_have_value('Saved: none')
+    memo.evaluate('''el => {
+        el.focus();
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.value = 'かな😀';
+        el.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertCompositionText',
+            data:'かな😀', isComposing:true}));
+    }''')
+    expect(composition).to_have_value('Composition: active')
+    expect(value).to_have_value('Value: seed')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Save pending')
+    memo.evaluate("el => el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'かな😀'}))")
+    expect(composition).to_have_value('Composition: idle')
+    expect(value).to_have_value('Value: かな😀')
+    expect(saved_text).to_have_value('Saved: かな😀')
+    memo.focus()
+    page.keyboard.press('Control+Enter')
+    expect(composition).to_have_value('Ctrl+Enter routed')
+
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')
 
@@ -135,6 +164,7 @@ with sync_playwright() as p:
     assert page.locator('#status').get_attribute('data-state') == 'ready'
     assert not errors, errors
     print(json.dumps({'dom_mouse_and_keyboard': True, 'pascal_canvas_colors': True,
+                      'dom_textarea_composition_unicode_and_ctrl_enter': True,
                       'checkbox_changes_lcl_paint': True, 'canvas_pointer_and_reset': True,
                       'anchored_resize': True, 'callback_cycles': 100,
                       'direct_download': True, 'default_extension': True,

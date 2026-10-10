@@ -44,16 +44,19 @@ type
   end;
 procedure SyncBrowserDOM;
 procedure DispatchBrowserDOMControl(Handle: PtrUInt);
+procedure DispatchBrowserDOMComposition(Handle: PtrUInt; Started: Boolean);
 procedure FocusBrowserDOMControl(Handle: PtrUInt);
 implementation
-uses CustomDrawnWSControls, CustomDrawnPrivate, LCLMessageGlue, LCLIntf, CustomDrawnInt;
+uses CustomDrawnWSControls, CustomDrawnPrivate, LCLMessageGlue, LCLIntf,
+  LMessages, CustomDrawnInt;
 type
   TDOMControl = class
     Control: TWinControl;
     Element, CaptionElement, Root: IJSObject;
     SyncedStyle, SyncedText, SyncedLabel: String;
     SyncedStart, SyncedFinish: Integer;
-    SyncedEnabled, SyncedReadOnly, Initialized, Updating, Hidden: Boolean;
+    SyncedEnabled, SyncedReadOnly, Initialized, Updating, Hidden,
+      IsComposing: Boolean;
     SyncedMaxLength: Integer;
     procedure Activate;
     procedure Sync;
@@ -89,6 +92,24 @@ begin
     end;
 end;
 
+procedure DispatchBrowserDOMComposition(Handle: PtrUInt; Started: Boolean);
+var
+  I, Flags: Integer;
+  Entry: TDOMControl;
+begin
+  if Entries = nil then Exit;
+  if Started then Flags := GTK_IM_FLAG_START else Flags := GTK_IM_FLAG_END;
+  for I := 0 to Entries.Count-1 do
+  begin
+    Entry := TDOMControl(Entries[I]);
+    if PtrUInt(Entry.Control) <> Handle then Continue;
+    if not (Entry.Control is TCustomEdit) then Exit;
+    Entry.IsComposing := Started;
+    Entry.Control.Perform(LM_IM_COMPOSITION, Flags, 0);
+    Exit;
+  end;
+end;
+
 procedure FocusBrowserDOMControl(Handle: PtrUInt);
 var
   I: Integer;
@@ -119,7 +140,14 @@ begin
     try
       SyncedText := Value;
       SyncedStart := Start; SyncedFinish := Finish;
-      if TCustomEdit(Control).Text <> Value then TCustomEdit(Control).Text := Value;
+      if TCustomEdit(Control).Text <> Value then
+      begin
+        TCustomEdit(Control).Text := Value;
+        { TCustomMemo stores Text in Lines and does not emit CM_TEXTCHANGED
+          from its setter. A browser textarea change is user input, so notify
+          the LCL after copying its value into the memo. }
+        if Control is TCustomMemo then Control.Perform(CM_TEXTCHANGED, 0, 0);
+      end;
       Prefix := UTF8Encode(Copy(UTF8Decode(Value), 1, Start));
       TCDWSCustomEdit.SetSelLength(TCustomEdit(Control), 0);
       TCDWSCustomEdit.SetSelStart(TCustomEdit(Control), UTF8Length(Prefix));
@@ -181,16 +209,19 @@ begin
   if Control is TCustomEdit then
   begin
     Edit := TCustomEdit(Control);
-    Value := Edit.Text;
-    if not Initialized or (SyncedText <> Value) then Element.WriteJSPropertyUTF8String('value', Value);
-    SyncedText := Value;
-    Start := TCDWSCustomEdit.GetSelStart(Edit);
-    Finish := Start + TCDWSCustomEdit.GetSelLength(Edit);
-    Start := Length(UTF8Decode(UTF8Copy(Value, 1, Start)));
-    Finish := Length(UTF8Decode(UTF8Copy(Value, 1, Finish)));
-    if not Initialized or (SyncedStart <> Start) then Element.WriteJSPropertyLongInt('selectionStart', Start);
-    if not Initialized or (SyncedFinish <> Finish) then Element.WriteJSPropertyLongInt('selectionEnd', Finish);
-    SyncedStart := Start; SyncedFinish := Finish;
+    if not IsComposing then
+    begin
+      Value := Edit.Text;
+      if not Initialized or (SyncedText <> Value) then Element.WriteJSPropertyUTF8String('value', Value);
+      SyncedText := Value;
+      Start := TCDWSCustomEdit.GetSelStart(Edit);
+      Finish := Start + TCDWSCustomEdit.GetSelLength(Edit);
+      Start := Length(UTF8Decode(UTF8Copy(Value, 1, Start)));
+      Finish := Length(UTF8Decode(UTF8Copy(Value, 1, Finish)));
+      if not Initialized or (SyncedStart <> Start) then Element.WriteJSPropertyLongInt('selectionStart', Start);
+      if not Initialized or (SyncedFinish <> Finish) then Element.WriteJSPropertyLongInt('selectionEnd', Finish);
+      SyncedStart := Start; SyncedFinish := Finish;
+    end;
     if not Initialized or (SyncedReadOnly <> Edit.ReadOnly) then Element.WriteJSPropertyBoolean('readOnly', Edit.ReadOnly);
     SyncedReadOnly := Edit.ReadOnly;
     if Edit.MaxLength <> SyncedMaxLength then
@@ -225,7 +256,6 @@ begin
   Element.WriteJSPropertyObject('onselect', nil);
   Element.WriteJSPropertyObject('onkeydown', nil);
   Element.WriteJSPropertyObject('onkeyup', nil);
-  Element.WriteJSPropertyObject('oncompositionend', nil);
   Root.InvokeJSNoResult('remove', []);
   inherited Destroy;
 end;

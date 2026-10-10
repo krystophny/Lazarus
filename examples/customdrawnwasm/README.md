@@ -70,8 +70,10 @@ The checks use observable behavior: mouse and Enter activate the Pascal counter;
 Space and pointer clicks change checkbox state and the painted ellipse; a canvas
 click places the Pascal marker; Reset clears it. Exact RGB pixels check the raw
 image byte order. A platform resize exercises the form's existing Anchors, and
-100 activation callbacks must keep JOB's live-object count constant. The Save
-file controls check direct and staged downloads, repeat each save to the same
+100 activation callbacks must keep JOB's live-object count constant. A real DOM
+textarea also checks composition start/end, Unicode delivery after composition,
+and Ctrl+Enter routing through the LCL. The Save file controls check direct and
+staged downloads, repeat each save to the same
 selected destination without reopening the dialog, and confirm a failed rename
 does not download a file. These checks run against a real headless Chromium
 instance.

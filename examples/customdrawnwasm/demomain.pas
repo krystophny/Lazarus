@@ -4,29 +4,53 @@ unit DemoMain;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, Types,
-  Dialogs;
+  Dialogs, LMessages, LCLType;
 type
+  TCompositionMemo = class(TMemo)
+  private
+    FIsComposing: Boolean;
+    FOnCompositionChange: TNotifyEvent;
+  protected
+    procedure IMComposition(var Msg: TLMessage); message LM_IM_COMPOSITION;
+  published
+    property OnCompositionChange: TNotifyEvent read FOnCompositionChange
+      write FOnCompositionChange;
+  public
+    property IsComposing: Boolean read FIsComposing;
+  end;
+
   TDemoForm = class(TForm)
     CounterButton: TButton;
     ResetButton: TButton;
     SaveFileButton: TButton;
     SaveAgainButton: TButton;
+    CompositionSaveButton: TButton;
     FilledCheckBox: TCheckBox;
     AtomicRenameCheckBox: TCheckBox;
     FailRenameCheckBox: TCheckBox;
     Drawing: TPaintBox;
     HintLabel: TLabel;
+    CompositionMemo: TCompositionMemo;
+    CompositionStatus: TEdit;
+    CompositionValue: TEdit;
+    CompositionSaved: TEdit;
     procedure CounterButtonClick(Sender: TObject);
     procedure ResetButtonClick(Sender: TObject);
     procedure SaveFileButtonClick(Sender: TObject);
     procedure SaveAgainButtonClick(Sender: TObject);
+    procedure CompositionSaveButtonClick(Sender: TObject);
     procedure FilledCheckBoxChange(Sender: TObject);
     procedure DrawingPaint(Sender: TObject);
     procedure DrawingMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
+    procedure CompositionMemoChange(Sender: TObject);
+    procedure CompositionMemoCompositionChange(Sender: TObject);
+    procedure CompositionMemoKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
   private
     FCount, FMarkerX, FMarkerY: Integer;
     FHasMarker: Boolean;
+    FCompositionSavePending: Boolean;
     FLastSaveFileName: string;
     FLastSaveAtomic: Boolean;
     function WriteBrowserFile(const FileName: string; Atomic,
@@ -36,6 +60,19 @@ var
   DemoForm: TDemoForm;
 implementation
 {$R *.lfm}
+
+procedure TCompositionMemo.IMComposition(var Msg: TLMessage);
+var
+  NewValue: Boolean;
+begin
+  NewValue := FIsComposing;
+  if (Msg.WParam and GTK_IM_FLAG_START) <> 0 then NewValue := True;
+  if (Msg.WParam and GTK_IM_FLAG_END) <> 0 then NewValue := False;
+  if NewValue = FIsComposing then Exit;
+  FIsComposing := NewValue;
+  if Assigned(FOnCompositionChange) then FOnCompositionChange(Self);
+end;
+
 procedure TDemoForm.CounterButtonClick(Sender: TObject);
 begin
   Inc(FCount);
@@ -150,4 +187,47 @@ begin
   FHasMarker := True;
   Drawing.Invalidate;
 end;
+
+procedure TDemoForm.CompositionMemoChange(Sender: TObject);
+begin
+  CompositionValue.Text := 'Value: ' + CompositionMemo.Text;
+end;
+
+procedure TDemoForm.CompositionMemoCompositionChange(Sender: TObject);
+begin
+  if CompositionMemo.IsComposing then
+    CompositionStatus.Text := 'Composition: active'
+  else begin
+    CompositionStatus.Text := 'Composition: idle';
+    if FCompositionSavePending then
+    begin
+      CompositionSaved.Text := 'Saved: ' + CompositionMemo.Text;
+      FCompositionSavePending := False;
+    end;
+  end;
+end;
+
+procedure TDemoForm.CompositionSaveButtonClick(Sender: TObject);
+begin
+  if CompositionMemo.IsComposing then
+  begin
+    FCompositionSavePending := True;
+    CompositionSaved.Text := 'Save pending';
+  end
+  else
+    CompositionSaved.Text := 'Saved: ' + CompositionMemo.Text;
+end;
+
+procedure TDemoForm.CompositionMemoKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if (Key = VK_RETURN) and (ssCtrl in Shift) then
+  begin
+    CompositionStatus.Text := 'Ctrl+Enter routed';
+    Key := 0;
+  end;
+end;
+
+initialization
+  RegisterClass(TCompositionMemo);
 end.
