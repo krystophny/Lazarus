@@ -56,7 +56,7 @@ function virtualFile(path) {
   return entry;
 }
 function downloadPendingFile(name, file) {
-  if (!file?.data || !downloadPaths.delete(name)) return false;
+  if (!file?.data || !downloadPaths.has(name)) return false;
   download(name, file.data.slice());
   return true;
 }

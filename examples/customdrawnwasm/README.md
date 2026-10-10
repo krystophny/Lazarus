@@ -71,9 +71,10 @@ Space and pointer clicks change checkbox state and the painted ellipse; a canvas
 click places the Pascal marker; Reset clears it. Exact RGB pixels check the raw
 image byte order. A platform resize exercises the form's existing Anchors, and
 100 activation callbacks must keep JOB's live-object count constant. The Save
-file control checks direct downloads and downloads after a staged file is
-committed with an atomic rename. These checks run against a real headless
-Chromium instance.
+file controls check direct and staged downloads, repeat each save to the same
+selected destination without reopening the dialog, and confirm a failed rename
+does not download a file. These checks run against a real headless Chromium
+instance.
 
 ## Application showcase and scope
 
