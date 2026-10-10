@@ -367,7 +367,9 @@ function commonDialog(options) {
         let name=fields.filename.value.trim().replace(/[/\\]/g,'_'); if (!name) return;
         const pattern=fields.filterIndex.selectedOptions[0]?.dataset.pattern || '';
         const ext=(pattern.match(/\*\.(\w+)/)||[])[1] || (options.defaultExt || '').replace(/^\./,'');
-        if (ext && !name.toLowerCase().endsWith('.'+ext.toLowerCase())) name+='.'+ext;
+        const dot=name.lastIndexOf('.');
+        const hasExtension=dot>0 && dot<name.length-1;
+        if (ext && !hasExtension) name=name.replace(/\.+$/,'')+'.'+ext;
         downloadPaths.add(name); result={filename:'/'+name,filterIndex:Number(fields.filterIndex.value)};
       } else if (options.kind==='color') {
         const c=Number.parseInt(fields.color.value.slice(1),16);
