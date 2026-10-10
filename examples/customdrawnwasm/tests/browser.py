@@ -93,7 +93,8 @@ with sync_playwright() as p:
     atomic = page.get_by_role('checkbox', name='Atomic rename', exact=True)
     fail_rename = page.get_by_role('checkbox', name='Fail rename', exact=True)
     payload = b'WASI browser save payload\n'
-    for name, use_atomic in [('direct.txt', False), ('atomic.txt', True)]:
+    for name, expected_name, use_atomic in [
+            ('direct', 'direct.txt', False), ('atomic.txt', 'atomic.txt', True)]:
         atomic.set_checked(use_atomic)
         save_button.click()
         dialog = page.get_by_role('dialog')
@@ -101,16 +102,25 @@ with sync_playwright() as p:
         with page.expect_download() as pending:
             dialog.get_by_role('button', name='OK', exact=True).click()
         saved = pending.value
-        assert saved.suggested_filename == name, saved.suggested_filename
+        assert saved.suggested_filename == expected_name, saved.suggested_filename
         assert Path(saved.path()).read_bytes() == payload
         with page.expect_download() as repeated:
             save_again.click()
         repeated_save = repeated.value
-        assert repeated_save.suggested_filename == name, repeated_save.suggested_filename
+        assert repeated_save.suggested_filename == expected_name, repeated_save.suggested_filename
         assert Path(repeated_save.path()).read_bytes() == payload
         assert page.get_by_role('dialog').count() == 0, 'Save again unexpectedly opened a dialog'
 
     atomic.check()
+    save_button.click()
+    dialog = page.get_by_role('dialog')
+    dialog.get_by_label('File name').fill('explicit.tex')
+    with page.expect_download() as alternate_extension:
+        dialog.get_by_role('button', name='OK', exact=True).click()
+    explicit_save = alternate_extension.value
+    assert explicit_save.suggested_filename == 'explicit.tex', explicit_save.suggested_filename
+    assert Path(explicit_save.path()).read_bytes() == payload
+
     fail_rename.check()
     save_button.click()
     dialog = page.get_by_role('dialog')
@@ -127,7 +137,8 @@ with sync_playwright() as p:
     print(json.dumps({'dom_mouse_and_keyboard': True, 'pascal_canvas_colors': True,
                       'checkbox_changes_lcl_paint': True, 'canvas_pointer_and_reset': True,
                       'anchored_resize': True, 'callback_cycles': 100,
-                      'direct_download': True, 'atomic_rename_download': True,
+                      'direct_download': True, 'default_extension': True,
+                      'explicit_alternate_extension': True, 'atomic_rename_download': True,
                       'direct_repeat_download': True, 'atomic_repeat_download': True,
                       'failed_rename_no_download': True,
                       'job_before': before, 'job_after': after}))
