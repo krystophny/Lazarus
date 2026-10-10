@@ -195,6 +195,7 @@ type
   published
     class procedure SetCallbacks(const AGtkWidget: PGtkWidget; const AWidgetInfo: PWidgetInfo); virtual;
     class function CreateHandle(const AWinControl: TWinControl; const AParams: TCreateParams): TLCLHandle; override;
+    class procedure DestroyHandle(const AWinControl: TWinControl); override;
     class function GetCaretPos(const ACustomEdit: TCustomEdit): TPoint; override;
     class function GetSelStart(const ACustomEdit: TCustomEdit): integer; override;
     class function GetSelLength(const ACustomEdit: TCustomEdit): integer; override;
@@ -230,6 +231,7 @@ type
     class procedure SetCallbacks(const AGtkWidget: PGtkWidget; const AWidgetInfo: PWidgetInfo); virtual;
   published
     class function  CreateHandle(const AWinControl: TWinControl; const AParams: TCreateParams): TLCLHandle; override;
+    class procedure DestroyHandle(const AWinControl: TWinControl); override;
 
     class function  GetSelStart(const ACustomEdit: TCustomEdit): integer; override;
     class function  GetSelLength(const ACustomEdit: TCustomEdit): integer; override;
@@ -1073,6 +1075,7 @@ class procedure TGtk2WSCustomEdit.SetCallbacks(const AGtkWidget: PGtkWidget;
   const AWidgetInfo: PWidgetInfo);
 begin
   TGtk2WSWinControl.SetCallbacks(PGtkObject(AGtkWidget), TComponent(AWidgetInfo^.LCLObject));
+  Gtk2WS_AttachNativeIME(AGtkWidget, AWidgetInfo^.CoreWidget);
 
   with TGtk2Widgetset(Widgetset) do
   begin
@@ -1085,6 +1088,13 @@ begin
 
   g_signal_connect_after(PGtkObject(AGtkWidget), 'populate-popup',
     gtk_signal_func(@gtkDefaultPopupMenuCloseFix), AWidgetInfo);
+end;
+
+class procedure TGtk2WSCustomEdit.DestroyHandle(const AWinControl: TWinControl);
+begin
+  if AWinControl.HandleAllocated then
+    Gtk2WS_DetachNativeIME(PGtkWidget(AWinControl.Handle));
+  TGtk2WSWinControl.DestroyHandle(AWinControl);
 end;
 
 class procedure TGtk2WSCustomEdit.GetPreferredSize(const AWinControl: TWinControl;
