@@ -260,7 +260,7 @@ begin
     BrowserFullDamage := True
   else if not BrowserFullDamage then
   begin
-    Position := FindControlPositionRelativeToTheForm(Control);
+    Position := FindControlPositionRelativeToTheForm(Control, True);
     if Rect = nil then Damage := Bounds(0, 0, Control.Width, Control.Height)
     else Damage := Rect^;
     OffsetRect(Damage, Position.X, Position.Y);

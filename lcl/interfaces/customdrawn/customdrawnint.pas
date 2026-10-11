@@ -588,6 +588,7 @@ procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
 procedure LCLWasmResize(Width, Height: LongInt); cdecl;
 procedure LCLWasmTimer(Handle: LongInt); cdecl;
 procedure LCLWasmIdle;
+procedure CDForgetBrowserFocusReveal(Control: TWinControl);
 {$endif}
 
 implementation
@@ -606,6 +607,13 @@ uses
   Win32Extra,}
   customdrawnprivate,
   LCLMessageGlue;
+
+{$ifdef CD_Wasm}
+procedure CDForgetBrowserFocusReveal(Control: TWinControl);
+begin
+  ForgetBrowserFocusReveal(Control);
+end;
+{$endif}
 
   {$ifdef CD_Windows}
 const

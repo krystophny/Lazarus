@@ -4,7 +4,7 @@ unit DemoMain;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, Types,
-  Dialogs, LMessages, LCLType;
+  Dialogs, LMessages, LCLType, LCLIntf;
 type
   TCompositionMemo = class(TMemo)
   private
@@ -61,6 +61,11 @@ type
     procedure CompositionMemoCompositionChange(Sender: TObject);
     procedure CompositionMemoKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure ScrollButtonClick(Sender: TObject);
+    procedure ScrollPaintPaint(Sender: TObject);
+    procedure ScrollNestedPaintPaint(Sender: TObject);
+    procedure ScrollPaintMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
   private
     FCount, FMarkerX, FMarkerY, FShortcutCount: Integer;
     FHasMarker: Boolean;
@@ -69,6 +74,15 @@ type
     FMemoChangeCount: Integer;
     FLastSaveFileName: string;
     FLastSaveAtomic: Boolean;
+    FScrollBox: TScrollBox;
+    FScrollTopButton, FScrollButton: TButton;
+    FScrollEdit: TEdit;
+    FScrollPaint, FScrollNestedPaint: TPaintBox;
+    FScrollPanel: TPanel;
+    FScrollSource: TEdit;
+    FScrollOriginChecked: Boolean;
+    FScrollPaintClickCount: Integer;
+    procedure CheckScrollWindowOrigin(DC: HDC);
     procedure FocusIdleCallback(Data: PtrInt);
     function WriteBrowserFile(const FileName: string; Atomic,
       FailRename: Boolean): Boolean;
@@ -347,6 +361,60 @@ begin
   if CompositionMemo.Text <> ExpectedText then
     raise Exception.Create('Pre-handle memo Text setter lost its final newline');
   CompositionValue.Text := 'Value: ' + DisplayMemoText(CompositionMemo.Text);
+
+  FScrollSource := TEdit.Create(Self);
+  FScrollSource.Parent := Self;
+  FScrollSource.Name := 'ScrollSource';
+  FScrollSource.Hint := 'Scroll source';
+  FScrollSource.ShowHint := True;
+  FScrollSource.SetBounds(344, 220, 250, 26);
+  FScrollSource.Text := 'Focus, then Tab to the lower field';
+  FScrollSource.TabOrder := 16;
+  FScrollBox := TScrollBox.Create(Self);
+  FScrollBox.Parent := Self;
+  FScrollBox.Name := 'ScrollFixture';
+  FScrollBox.SetBounds(344, 280, 352, 180);
+  FScrollBox.AutoScroll := True;
+  FScrollBox.TabOrder := 17;
+  FScrollBox.TabStop := False;
+  FScrollBox.OnMouseDown := @ScrollPaintMouseDown;
+  FScrollTopButton := TButton.Create(Self);
+  FScrollTopButton.Parent := FScrollBox;
+  FScrollTopButton.Caption := 'Top scroll button';
+  FScrollTopButton.SetBounds(8, 8, 160, 26);
+  FScrollTopButton.TabOrder := 0;
+  FScrollButton := TButton.Create(Self);
+  FScrollButton.Parent := FScrollBox;
+  FScrollButton.Caption := 'Scroll button';
+  FScrollButton.SetBounds(8, 220, 160, 26);
+  FScrollButton.TabOrder := 1;
+  FScrollButton.OnClick := @ScrollButtonClick;
+  FScrollEdit := TEdit.Create(Self);
+  FScrollEdit.Parent := FScrollBox;
+  FScrollEdit.Name := 'ScrollTarget';
+  FScrollEdit.Hint := 'Scroll target';
+  FScrollEdit.ShowHint := True;
+  FScrollEdit.SetBounds(8, 300, 250, 26);
+  FScrollEdit.Text := 'Scroll target value';
+  FScrollEdit.TabOrder := 2;
+  FScrollPaint := TPaintBox.Create(Self);
+  FScrollPaint.Name := 'ScrollPaint';
+  FScrollPaint.Parent := FScrollBox;
+  FScrollPaint.SetBounds(280, 170, 24, 24);
+  FScrollPaint.OnPaint := @ScrollPaintPaint;
+  FScrollPaint.OnMouseDown := @ScrollPaintMouseDown;
+  FScrollPanel := TPanel.Create(Self);
+  FScrollPanel.Name := 'ScrollPanel';
+  FScrollPanel.Parent := FScrollBox;
+  FScrollPanel.SetBounds(150, 135, 100, 80);
+  FScrollPanel.BevelOuter := bvNone;
+  FScrollPanel.OnMouseDown := @ScrollPaintMouseDown;
+  FScrollNestedPaint := TPaintBox.Create(Self);
+  FScrollNestedPaint.Name := 'ScrollNestedPaint';
+  FScrollNestedPaint.Parent := FScrollPanel;
+  FScrollNestedPaint.SetBounds(20, 35, 24, 24);
+  FScrollNestedPaint.OnPaint := @ScrollNestedPaintPaint;
+  FScrollNestedPaint.OnMouseDown := @ScrollPaintMouseDown;
 end;
 
 procedure TDemoForm.CompositionMemoKeyDown(Sender: TObject; var Key: Word;
@@ -357,6 +425,61 @@ begin
     CompositionStatus.Text := 'Ctrl+Enter routed';
     Key := 0;
   end;
+end;
+
+procedure TDemoForm.ScrollButtonClick(Sender: TObject);
+begin
+  FScrollButton.Caption := 'Scroll button clicked';
+end;
+
+procedure TDemoForm.CheckScrollWindowOrigin(DC: HDC);
+var
+  OldOrigin, Origin, ReturnedOrigin: TPoint;
+begin
+  if FScrollOriginChecked then Exit;
+  FScrollOriginChecked := True;
+  if GetWindowOrgEx(DC, @OldOrigin) = 0 then
+    raise Exception.Create('Could not read the painted control window origin');
+  try
+    if not SetWindowOrgEx(DC, 7, 9, @ReturnedOrigin) then
+      raise Exception.Create('Could not set the painted control window origin');
+    if (ReturnedOrigin.X <> OldOrigin.X) or (ReturnedOrigin.Y <> OldOrigin.Y) then
+      raise Exception.CreateFmt('SetWindowOrgEx returned %d,%d, expected %d,%d',
+        [ReturnedOrigin.X, ReturnedOrigin.Y, OldOrigin.X, OldOrigin.Y]);
+    if (GetWindowOrgEx(DC, @Origin) = 0)
+      or (Origin.X <> 7) or (Origin.Y <> 9) then
+      raise Exception.CreateFmt('Set/Get window origin returned %d,%d',
+        [Origin.X, Origin.Y]);
+    if not MoveWindowOrgEx(DC, 3, 4) then
+      raise Exception.Create('Could not move the painted control window origin');
+    if (GetWindowOrgEx(DC, @Origin) = 0)
+      or (Origin.X <> 4) or (Origin.Y <> 5) then
+      raise Exception.CreateFmt('Move/Get window origin returned %d,%d',
+        [Origin.X, Origin.Y]);
+  finally
+    SetWindowOrgEx(DC, OldOrigin.X, OldOrigin.Y, nil);
+  end;
+end;
+
+procedure TDemoForm.ScrollPaintPaint(Sender: TObject);
+begin
+  CheckScrollWindowOrigin(TPaintBox(Sender).Canvas.Handle);
+  FScrollPaint.Canvas.Brush.Color := clRed;
+  FScrollPaint.Canvas.FillRect(FScrollPaint.ClientRect);
+end;
+
+procedure TDemoForm.ScrollNestedPaintPaint(Sender: TObject);
+begin
+  FScrollNestedPaint.Canvas.Brush.Color := clBlue;
+  FScrollNestedPaint.Canvas.FillRect(FScrollNestedPaint.ClientRect);
+end;
+
+procedure TDemoForm.ScrollPaintMouseDown(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FScrollPaintClickCount);
+  CompositionSaved.Text := Format('Scroll click %d: %s',
+    [FScrollPaintClickCount, TControl(Sender).Name]);
 end;
 
 initialization
