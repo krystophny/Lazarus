@@ -687,7 +687,7 @@ end;
 // This routine is only for platforms which need a special combobox dialog, like Android
 // It returns true if a dialog was provided for doing this task or false otherwise
 // The process is assynchronous, so the result will be given in LCLIntf.OnShowSelectItemDialogResult
-function TWidgetSet.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;
+function TWidgetSet.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer): Boolean;
 begin
   Result := False;
 end;

@@ -747,7 +747,7 @@ begin
 end;*)
 
 {$ifndef CD_HasNativeSelectItemDialog}
-function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;
+function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; {%H-}ASelectedIndex: Integer): Boolean;
 var
   i: Integer;
   lPopUpMenu: TPopUpMenu;
