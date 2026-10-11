@@ -109,10 +109,17 @@ with sync_playwright() as p:
         expect(saved_text).to_have_value('Saved: ' + value_text)
         expect(change_count).to_have_value('Changes: ' + str(change_number))
 
-    # A painted-control double-click handler may move focus to a DOM-backed edit.
-    # Keep that explicit application focus and deliver a real browser keystroke.
-    composition.focus()
-    page.locator('#lcl').dblclick(position={'x': 434, 'y': 169})
+    # Leave the memo cached as the last DOM focus while the painted panel takes
+    # LCL focus; then its double-click handler returns focus to the memo.
+    canvas = page.locator('#lcl')
+    memo.focus()
+    frames = int(canvas.get_attribute('data-frames'))
+    canvas.click(position={'x': 434, 'y': 169})
+    expect(canvas).to_be_focused()
+    page.wait_for_function(
+        'frames => Number(document.querySelector("#lcl").dataset.frames) > frames',
+        arg=frames)
+    canvas.dblclick(position={'x': 434, 'y': 169})
     expect(memo).to_be_focused()
     memo.evaluate('el => el.setSelectionRange(el.value.length, el.value.length)')
     page.keyboard.type('!')
