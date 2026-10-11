@@ -458,7 +458,7 @@ begin
   inherited;
 end;
 
-function TTestMockWidgetSet.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;
+function TTestMockWidgetSet.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; {%H-}ASelectedIndex: Integer): Boolean;
 begin
   {$IFDEF MOCKINT_TEST_ASSERT_NO_BYPASS_TO_BASE} assert(false, 'missing mock implementation for '+{$I %CurrentRoutine%}); {$ENDIF}
   Result := inherited;

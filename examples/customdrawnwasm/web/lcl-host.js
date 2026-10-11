@@ -341,7 +341,9 @@ function selectItemDialog(options) {
     const option = document.createElement('option');
     option.textContent = caption; option.value = index; select.append(option);
   });
-  select.selectedIndex = 0;
+  const selectedIndex = options.selectedIndex;
+  select.selectedIndex = Number.isInteger(selectedIndex) && selectedIndex >= 0
+    && selectedIndex < options.items.length ? selectedIndex : 0;
   label.append(select);
   const ok = document.createElement('button'); ok.type = 'submit'; ok.textContent = 'OK';
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
