@@ -127,6 +127,24 @@ with sync_playwright() as p:
     expect(memo).to_be_focused()
     expect(change_count).to_have_value('Changes: 7')
 
+    # The existing LCL memo keeps native textarea wheel scrolling.
+    memo.evaluate('''el => {
+        el.value = Array(80).fill('wheel line').join(String.fromCharCode(10));
+        el.scrollTop = 0;
+    }''')
+    assert memo.evaluate('(el) => el.scrollHeight > el.clientHeight')
+    textarea_box = memo.bounding_box()
+    assert textarea_box is not None
+    outer_scroll = page.locator('.scroller')
+    textarea_page_scroll = outer_scroll.evaluate('(el) => el.scrollTop')
+    textarea_canvas_top = canvas.bounding_box()['y']
+    page.mouse.move(textarea_box['x'] + textarea_box['width'] / 2,
+                    textarea_box['y'] + textarea_box['height'] / 2)
+    page.mouse.wheel(0, 120)
+    page.wait_for_function('(el) => el.scrollTop > 0', arg=memo.element_handle())
+    assert outer_scroll.evaluate('(el) => el.scrollTop') == textarea_page_scroll
+    assert abs(canvas.bounding_box()['y'] - textarea_canvas_top) < 1
+
     page.get_by_role('button', name='Destroy on change', exact=True).click()
     old_memo = memo.element_handle()
     old_memo.evaluate('''el => {
@@ -436,6 +454,40 @@ with sync_playwright() as p:
         pass
     else:
         raise AssertionError('failed staged rename produced a download')
+    # Wheel input over a DOM overlay must scroll the LCL viewport instead of
+    # the outer page. The overlay button remains a real browser hit target.
+    outer_scroll = page.locator('.scroller')
+    outer_scroll_top = outer_scroll.evaluate('(el) => el.scrollTop')
+    top_button_rect = top_scroll_button.bounding_box()
+    page.mouse.move(top_button_rect['x'] + top_button_rect['width'] / 2,
+                    top_button_rect['y'] + top_button_rect['height'] / 2)
+    page.mouse.wheel(0, 120)
+    page.wait_for_function(
+        '(el) => parseInt(el.style.top, 10) < 500',
+        arg=scroll_button.element_handle())
+    assert outer_scroll.evaluate('(el) => el.scrollTop') == outer_scroll_top
+    assert abs(canvas.bounding_box()['y'] - canvas_top) < 1
+    page.mouse.wheel(0, -120)
+    page.wait_for_function(
+        '(el) => parseInt(el.style.top, 10) === 500',
+        arg=scroll_button.element_handle())
+    assert outer_scroll.evaluate('(el) => el.scrollTop') == outer_scroll_top
+
+    # Wheel input over a painted canvas child follows the same ScrollBox path.
+    painted_wheel_top = scroll_button.evaluate('(el) => parseInt(el.style.top, 10)')
+    assert painted_wheel_top == 500
+    canvas_box = canvas.bounding_box()
+    page.mouse.move(canvas_box['x'] + 636, canvas_box['y'] + 455)
+    page.mouse.wheel(0, 120)
+    page.wait_for_function(
+        '(el) => parseInt(el.style.top, 10) < 500',
+        arg=scroll_button.element_handle())
+    assert outer_scroll.evaluate('(el) => el.scrollTop') == outer_scroll_top
+    page.mouse.wheel(0, -120)
+    page.wait_for_function(
+        '(el) => parseInt(el.style.top, 10) === 500',
+        arg=scroll_button.element_handle())
+
     assert page.locator('#status').get_attribute('data-state') == 'ready'
     assert not errors, errors
     print(json.dumps({'dom_mouse_and_keyboard': True, 'pascal_canvas_colors': True,
