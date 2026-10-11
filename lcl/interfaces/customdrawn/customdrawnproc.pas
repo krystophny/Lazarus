@@ -554,7 +554,12 @@ var
   lControlStateEx: TCDControlStateEx;
   lDrawControl: Boolean;
   lRegion:TLazRegionWithChilds;
-  PaintRect, ControlRect: TRect;
+  PaintRect, ControlRect, ParentRect, Intersection: TRect;
+  ParentPosition: TPoint;
+  HasScrollAncestor: Boolean;
+  {$ifdef CD_Wasm}
+  OldWindowOrg: TPoint;
+  {$endif}
 begin
   Result := False;
 
@@ -581,26 +586,50 @@ begin
   // Disable the drawing itself, but keep the window org and region operations
   // or else clicking and other things are broken
   lDrawControl := ACDWinControl.IsControlBackgroundVisible();
-  lBaseWindowOrg := FindControlPositionRelativeToTheForm(lWinControl);
-  ControlRect := Bounds(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY,
+  lBaseWindowOrg := FindControlPositionRelativeToTheForm(lWinControl, True);
+  ControlRect := Bounds(lBaseWindowOrg.X, lBaseWindowOrg.Y,
     lWinControl.Width, lWinControl.Height);
   PaintRect := ControlRect;
-  if (APaintRect <> nil) and not IntersectRect(PaintRect, ControlRect, APaintRect^) then
-    Exit;
+  HasScrollAncestor := False;
+  lParentControl := lWinControl.Parent;
+  while lParentControl <> nil do
+  begin
+    if lParentControl is TScrollingWinControl then
+    begin
+      HasScrollAncestor := True;
+      ParentPosition := FindControlPositionRelativeToTheForm(lParentControl, True);
+      ParentRect := lParentControl.ClientRect;
+      OffsetRect(ParentRect, ParentPosition.X, ParentPosition.Y);
+      if IntersectRect(Intersection, PaintRect, ParentRect) then
+        PaintRect := Intersection
+      else
+      begin
+        PaintRect := Rect(0, 0, 0, 0);
+        Break;
+      end;
+    end;
+    lParentControl := lParentControl.Parent;
+  end;
+
+  ACDWinControl.Region.Rect := ControlRect;
+  if IsRectEmpty(PaintRect) then Exit;
+  if (APaintRect <> nil) then
+  begin
+    if not IntersectRect(Intersection, PaintRect, APaintRect^) then Exit;
+    PaintRect := Intersection;
+  end;
 
   // Save the Canvas state
   ACanvas.SaveState;
   ACanvas.ResetCanvasState;
 
-  ACanvas.BaseWindowOrg := Point(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY);
+  ACanvas.BaseWindowOrg := lBaseWindowOrg;
   ACanvas.WindowOrg := Point(0, 0);
 
   // Prepare the clippping relative to the form
   ACanvas.Clipping := True;
-  ACDWinControl.Region.Rect := Bounds(lBaseWindowOrg.X, lBaseWindowOrg.Y - ACDForm.ScrollY,
-    lWinControl.Width, lWinControl.Height);
   lRegion := TLazRegionWithChilds.Create;
-  if APaintRect <> nil then
+  if (APaintRect <> nil) or HasScrollAncestor then
     lRegion.SetAsSimpleRectRegion(Rect(PaintRect.Left, PaintRect.Top,
       PaintRect.Right-1, PaintRect.Bottom-1))
   else
@@ -663,7 +692,26 @@ begin
     struct.hdc := HDC(lControlCanvas);
     if APaintRect <> nil then struct.rcPaint := PaintRect;
     LCLSendEraseBackgroundMsg(lWinControl, struct.hdc);
+    {$ifdef CD_Wasm}
+    if lWinControl is TScrollBox then
+    begin
+      { PaintControls moves the DC origin for each graphic child. Set the
+        scroll offset once on this DC so each logical child origin includes it. }
+      OldWindowOrg := lControlCanvas.WindowOrg;
+      try
+        lControlCanvas.WindowOrg := Point(
+          -TScrollBox(lWinControl).HorzScrollBar.Position,
+          -TScrollBox(lWinControl).VertScrollBar.Position);
+        LCLSendPaintMsg(lWinControl, struct.hdc, @struct);
+      finally
+        lControlCanvas.WindowOrg := OldWindowOrg;
+      end;
+    end
+    else
+      LCLSendPaintMsg(lWinControl, struct.hdc, @struct);
+    {$else}
     LCLSendPaintMsg(lWinControl, struct.hdc, @struct);
+    {$endif}
     if APaintRect <> nil then lControlCanvas.RestoreState(-1);
     {$ifdef VerboseCDWinControl}
     DebugLn('[RenderWinControl] after LCLSendPaintMsg');
@@ -804,11 +852,13 @@ end;
 
 function FindControlPositionRelativeToTheForm(ALCLControl: TWinControl; AConsiderScrolling: Boolean = False): TPoint;
 var
-  lParentControl: TWinControl;
+  lParentControl, lChildControl: TWinControl;
   lParentHandle: TCDBaseControl;
   lScroll, lParentPos: TPoint;
+  lBars: TCDScrollBars;
 begin
   lParentControl := ALCLControl.Parent;
+  lChildControl := ALCLControl;
   if lParentControl = nil then Exit(Point(0, 0));
   // Iterate to find the appropriate BaseWindowOrg relative to the parent control
   Result := Point(ALCLControl.Left, ALCLControl.Top);
@@ -817,6 +867,11 @@ begin
     begin
       lParentHandle := TCDBaseControl(lParentControl.Handle);
       lScroll := Point(lParentHandle.ScrollX, lParentHandle.ScrollY);
+      lBars := FindScrollBars(lParentControl.Handle);
+      if (lBars <> nil)
+        and ((lBars.GetBar(SB_HORZ) = lChildControl)
+          or (lBars.GetBar(SB_VERT) = lChildControl)) then
+        lScroll := Point(0, 0);
     end
     else lScroll := Point(0, 0);
 
@@ -825,6 +880,7 @@ begin
 
     Result.X := Result.X + lParentPos.X - lScroll.X;
     Result.Y := Result.Y + lParentPos.Y - lScroll.Y;
+    lChildControl := lParentControl;
     lParentControl := lParentControl.Parent;
   until lParentControl = nil;
 end;
