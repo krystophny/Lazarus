@@ -141,6 +141,7 @@ end;
 procedure LCLWasmFocus(Handle: LongInt); cdecl;
 begin
   FocusBrowserDOMControl(PtrUInt(Handle));
+  LCLWasmIdle;
 end;
 
 procedure LCLWasmControl(Handle: LongInt); cdecl;
