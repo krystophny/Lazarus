@@ -33,6 +33,15 @@ with sync_playwright() as p:
     expect(saved_text).to_have_value('Saved: none')
     expect(change_count).to_have_value('Changes: 0')
 
+    # Focus handlers can queue async application work. It must run before the
+    # browser focus callback returns, without a later key or input event.
+    focus_result = page.evaluate('''() => {
+        document.querySelector('#lcl-dom textarea').focus();
+        document.querySelector('#lcl-dom input[aria-label="Composition status"]').focus();
+        return document.querySelector('#lcl-dom input[aria-label="Saved text"]').value;
+    }''')
+    assert focus_result == 'Focus callback completed', focus_result
+
     # LCL Tab traversal must move browser focus too. If it leaves DOM focus on
     # the textarea, typing after the move still changes the memo invisibly.
     memo.focus()
