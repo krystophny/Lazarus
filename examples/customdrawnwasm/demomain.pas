@@ -37,6 +37,7 @@ type
     CompositionValue: TEdit;
     CompositionSaved: TEdit;
     CompositionChangeCount: TEdit;
+    procedure CompositionStatusEnter(Sender: TObject);
     procedure CounterButtonClick(Sender: TObject);
     procedure ResetButtonClick(Sender: TObject);
     procedure SaveFileButtonClick(Sender: TObject);
@@ -62,6 +63,7 @@ type
     FMemoChangeCount: Integer;
     FLastSaveFileName: string;
     FLastSaveAtomic: Boolean;
+    procedure FocusIdleCallback(Data: PtrInt);
     function WriteBrowserFile(const FileName: string; Atomic,
       FailRename: Boolean): Boolean;
   end;
@@ -232,6 +234,16 @@ begin
       FCompositionSavePending := False;
     end;
   end;
+end;
+
+procedure TDemoForm.CompositionStatusEnter(Sender: TObject);
+begin
+  Application.QueueAsyncCall(@FocusIdleCallback, 0);
+end;
+
+procedure TDemoForm.FocusIdleCallback(Data: PtrInt);
+begin
+  CompositionSaved.Text := 'Focus callback completed';
 end;
 
 procedure TDemoForm.DestroyMemoButtonClick(Sender: TObject);

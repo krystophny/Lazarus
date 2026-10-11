@@ -147,6 +147,7 @@ object DemoForm: TDemoForm
     ReadOnly = True
     Text = 'Composition: idle'
     Hint = 'Composition status'
+    OnEnter = CompositionStatusEnter
   end
   object CompositionValue: TEdit
     Left = 344
