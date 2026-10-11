@@ -154,9 +154,26 @@ object DemoForm: TDemoForm
     Top = 126
     Width = 220
     Height = 26
-    ReadOnly = True
     Text = 'Value: seed'
     Hint = 'Composition value'
+    TabOrder = 13
+  end
+  object PaintedCombo: TComboBox
+    Left = 566
+    Top = 126
+    Width = 134
+    Height = 26
+    Hint = 'Painted combo keyboard target'
+    Items.Strings = (
+      'Regular'
+      'Bold'
+      'Italic'
+    )
+    ItemIndex = 0
+    Style = csDropDownList
+    TabOrder = 14
+    OnEnter = PaintedComboEnter
+    OnChange = PaintedComboChange
   end
   object CompositionSaved: TEdit
     Left = 24

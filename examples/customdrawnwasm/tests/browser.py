@@ -124,6 +124,18 @@ with sync_playwright() as p:
     expect(composition).to_have_value('Composition: idle')
     expect(change_count).to_have_value('Changes: 7')
 
+    # A painted combo has no overlay element of its own. Leaving the DOM edit
+    # focused would make the host discard ArrowDown before it reaches LCL.
+    focus_source = page.get_by_label('Composition value')
+    focus_source.focus()
+    expect(focus_source).to_be_focused()
+    page.keyboard.press('Tab')
+    expect(saved_text).to_have_value('Painted combo focused')
+    expect(focus_source).not_to_be_focused()
+    page.keyboard.press('ArrowDown')
+    expect(saved_text).to_have_value('Painted combo: Bold')
+    expect(focus_source).to_have_value('Memo destroyed')
+
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')
 
