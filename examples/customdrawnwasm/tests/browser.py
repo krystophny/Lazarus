@@ -108,6 +108,18 @@ with sync_playwright() as p:
         page.get_by_role('button', name='Save text', exact=True).click()
         expect(saved_text).to_have_value('Saved: ' + value_text)
         expect(change_count).to_have_value('Changes: ' + str(change_number))
+
+    # A painted-control double-click handler may move focus to a DOM-backed edit.
+    # Keep that explicit application focus and deliver a real browser keystroke.
+    composition.focus()
+    page.locator('#lcl').dblclick(position={'x': 434, 'y': 169})
+    expect(memo).to_be_focused()
+    memo.evaluate('el => el.setSelectionRange(el.value.length, el.value.length)')
+    page.keyboard.type('!')
+    expect(memo).to_have_value('alpha\nbeta\n!')
+    expect(memo).to_be_focused()
+    expect(change_count).to_have_value('Changes: 7')
+
     page.get_by_role('button', name='Destroy on change', exact=True).click()
     old_memo = memo.element_handle()
     old_memo.evaluate('''el => {
@@ -116,13 +128,13 @@ with sync_playwright() as p:
         el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'destroy'}));
     }''')
     expect(value).to_have_value('Memo destroyed')
-    expect(change_count).to_have_value('Changes: 7')
+    expect(change_count).to_have_value('Changes: 8')
     old_memo.evaluate('''el => {
         el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
         el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
     }''')
     expect(composition).to_have_value('Composition: idle')
-    expect(change_count).to_have_value('Changes: 7')
+    expect(change_count).to_have_value('Changes: 8')
 
     # A painted combo has no overlay element of its own. Leaving the DOM edit
     # focused would make the host discard ArrowDown before it reaches LCL.
