@@ -42,6 +42,7 @@ function measureText(value) {
 }
 const messageWaiters = [];
 let activeForm = 0;
+const compositionBindings = new Map();
 let pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
@@ -137,27 +138,62 @@ const imports = {
   })),
   control_bind: (pointer, idPtr, idLen) => {
     const element = document.getElementById(text(idPtr, idLen));
+    let composing = false;
     const dispatch = () => guarded(async () => {
+      if (!element.isConnected) return;
       await api.lcl_control(pointer);
+      wakeMessage();
+    });
+    const composition = started => guarded(async () => {
+      if (!element.isConnected) return;
+      await api.lcl_composition(pointer, Number(started));
       wakeMessage();
     });
     const editable = element.matches('textarea, input:not([type=checkbox])');
     const routesKey = event => event.key === 'Escape' || event.key === 'Tab'
-      || (editable && event.key === 'Enter' && element.tagName !== 'TEXTAREA');
+      || (editable && event.key === 'Enter'
+        && (element.tagName !== 'TEXTAREA' || event.ctrlKey || event.metaKey));
     element.onfocus = () => guarded(() => api.lcl_focus(pointer));
     element.onkeydown = event => {
-      if (!event.isComposing && routesKey(event)) {
+      if (!composing && !event.isComposing && routesKey(event)) {
         event.preventDefault(); key(0, event, true);
       }
     };
     element.onkeyup = event => {
-      if (!event.isComposing && routesKey(event)) key(1, event, true);
+      if (!composing && !event.isComposing && routesKey(event)) key(1, event, true);
     };
     if (editable) {
-      element.oninput = event => { if (!event.isComposing) dispatch(); };
-      element.oncompositionend = dispatch;
-      element.onselect = dispatch;
+      element.oninput = event => { if (!composing && !event.isComposing) dispatch(); };
+      const compositionStart = () => {
+        composing = true;
+        composition(true);
+      };
+      const compositionEnd = () => {
+        guarded(async () => {
+          if (!element.isConnected) return;
+          // Copy the final DOM value into Pascal before lifting its composition
+          // gate, so a pending Save cannot commit the previous draft.
+          await api.lcl_control(pointer);
+          // The text-change callback above may destroy the control and detach
+          // this element. Do not route compositionend through a stale pointer.
+          if (!element.isConnected) return;
+          composing = false;
+          await api.lcl_composition(pointer, 0);
+          wakeMessage();
+        });
+      };
+      element.addEventListener('compositionstart', compositionStart);
+      element.addEventListener('compositionend', compositionEnd);
+      compositionBindings.set(pointer, {element, compositionStart, compositionEnd});
+      element.onselect = () => { if (!composing) dispatch(); };
     } else element.onclick = event => { event.stopPropagation(); dispatch(); };
+  },
+  control_unbind: pointer => {
+    const binding = compositionBindings.get(pointer);
+    if (!binding) return;
+    binding.element.removeEventListener('compositionstart', binding.compositionStart);
+    binding.element.removeEventListener('compositionend', binding.compositionEnd);
+    compositionBindings.delete(pointer);
   },
   title: (pointer, length) => { document.title = text(pointer, length); },
   cursor: index => { canvas.style.cursor = standardCursors[-index] || 'default'; },
