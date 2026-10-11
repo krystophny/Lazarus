@@ -276,15 +276,84 @@ begin
   if Kind = 0 then SyncBrowserDOM;
 end;
 
+function CanScrollByWheel(AControl: TScrollingWinControl; Delta: LongInt): Boolean;
+var
+  ScrollBar: TControlScrollBar;
+  MaxPosition: LongInt;
+begin
+  Result := False;
+  if (AControl = nil) or (Delta = 0) then Exit;
+  ScrollBar := AControl.VertScrollBar;
+  MaxPosition := Max(0, ScrollBar.Range - ScrollBar.Page);
+  if Delta > 0 then
+    Result := ScrollBar.Position > 0
+  else
+    Result := ScrollBar.Position < MaxPosition;
+end;
+
+function HasScrollExtent(AControl: TScrollingWinControl): Boolean;
+var
+  ScrollBar: TControlScrollBar;
+begin
+  Result := False;
+  if AControl = nil then Exit;
+  ScrollBar := AControl.VertScrollBar;
+  Result := (ScrollBar.Range > ScrollBar.Page) or (ScrollBar.Position <> 0);
+end;
+
+function FindWheelScrollControl(AForm: TCustomForm; X, Y, Delta: LongInt): TScrollingWinControl;
+var
+  HitControl: TControl;
+  NearestScrollControl: TScrollingWinControl;
+begin
+  Result := nil;
+  NearestScrollControl := nil;
+  HitControl := AForm.ControlAtPos(Point(X, Y), [capfAllowWinControls, capfRecursive]);
+  while HitControl <> nil do
+  begin
+    if (HitControl <> AForm) and (HitControl is TScrollingWinControl)
+      and HasScrollExtent(TScrollingWinControl(HitControl)) then
+    begin
+      if NearestScrollControl = nil then
+        NearestScrollControl := TScrollingWinControl(HitControl);
+      if CanScrollByWheel(TScrollingWinControl(HitControl), Delta) then
+        Exit(TScrollingWinControl(HitControl));
+    end;
+    HitControl := HitControl.Parent;
+  end;
+  { At a boundary, keep the wheel owned by the nearest scroll container. }
+  Result := NearestScrollControl;
+end;
+
 procedure LCLWasmWheel(X, Y, Delta, Modifiers: LongInt); cdecl;
 var
   Form: TCDNonNativeForm;
+  ScrollControl: TScrollingWinControl;
+  ScrollPos: TPoint;
+  ScrollMessage: TLMVScroll;
+  MessageResult: PtrInt;
 begin
   Form := GetCurrentForm;
   if Form = nil then Exit;
   BrowserMouse := Point(X, Y);
   BrowserMods := Modifiers;
-  LCLSendMouseWheelMsg(Form.LCLForm, X, Y, Delta, BrowserShiftState(Modifiers));
+  ScrollControl := FindWheelScrollControl(Form.LCLForm, X, Y, Delta);
+  if ScrollControl = nil then
+    LCLSendMouseWheelMsg(Form.LCLForm, X, Y, Delta, BrowserShiftState(Modifiers))
+  else
+  begin
+    ScrollPos := FormPosToControlPos(ScrollControl, X, Y);
+    MessageResult := LCLSendMouseWheelMsg(ScrollControl, ScrollPos.X, ScrollPos.Y,
+      Delta, BrowserShiftState(Modifiers));
+    if (MessageResult = 0) and CanScrollByWheel(ScrollControl, Delta) then
+    begin
+      FillChar(ScrollMessage, SizeOf(ScrollMessage), 0);
+      ScrollMessage.Msg := LM_VSCROLL;
+      if Delta > 0 then ScrollMessage.ScrollCode := SB_LINEUP
+                   else ScrollMessage.ScrollCode := SB_LINEDOWN;
+      DeliverMessage(ScrollControl, ScrollMessage);
+    end;
+  end;
   LCLWasmIdle;
 end;
 

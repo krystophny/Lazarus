@@ -585,8 +585,10 @@ function key(kind, event, fromControl = false) {
 }
 document.addEventListener('keydown', event => { key(0, event); if ([...event.key].length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) key(2, event); });
 document.addEventListener('keyup', event => key(1, event));
-canvas.addEventListener('wheel', event => {
-  if (!ready) return;
+document.querySelector('#lcl-surface').addEventListener('wheel', event => {
+  if (!ready || event.defaultPrevented) return;
+  // Let native DOM editors and selects keep their own wheel behavior.
+  if (event.target.closest?.('#lcl-dom textarea, #lcl-dom select, #lcl-dom [contenteditable]:not([contenteditable="false"])')) return;
   event.preventDefault();
   const b = canvas.getBoundingClientRect();
   const x = Math.round((event.clientX-b.left)*canvas.width/b.width);
