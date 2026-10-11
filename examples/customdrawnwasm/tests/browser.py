@@ -238,6 +238,15 @@ with sync_playwright() as p:
     assert after['live'] == before['live'], (before, after)
     assert after['slots'] <= before['slots']+2, (before, after)
 
+    # A handled LCL shortcut must stop key bubbling. The form counts one F2
+    # action; redispatching the same shortcut to each ancestor increments it
+    # multiple times.
+    shortcut_canvas = page.locator('#lcl')
+    shortcut_canvas.focus()
+    expect(shortcut_canvas).to_be_focused()
+    page.keyboard.press('F2')
+    expect(saved_text).to_have_value('F2 shortcuts: 1')
+
     # Exercise the platform resize boundary; the LFM's Anchors must grow the paintbox.
     old = frame()
     page.evaluate('lclDemo.lcl_resize(800,520)')
