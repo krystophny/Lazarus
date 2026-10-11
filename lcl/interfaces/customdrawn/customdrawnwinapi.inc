@@ -4166,8 +4166,13 @@ begin
   if not IsValidDC(DC) then Exit;
   if P = nil then Exit;
 
+  {$ifdef CD_Wasm}
+  P^.X := -LazDC.WindowOrg.X;
+  P^.Y := -LazDC.WindowOrg.Y;
+  {$else}
   P^.X := LazDC.WindowOrg.X - LazDC.BaseWindowOrg.X;
   P^.Y := LazDC.WindowOrg.Y - LazDC.BaseWindowOrg.Y;
+  {$endif}
   Result := 1; // any non-zero will do according to MSDN
   {$ifdef VerboseCDDrawing}
     DebugLn(':<[WinAPI GetWindowOrgEx] Result='+dbgs(p^));
@@ -5236,6 +5241,19 @@ begin
   Bar := Bars.GetBar(SBStyle);
   if Bar <> nil then Result := Bar.Position
   else if (ScrollInfo.fMask and SIF_POS) <> 0 then Result := ScrollInfo.nPos;
+end;
+
+function TCDWidgetSet.GetScrollbarVisible(Handle: HWND; SBStyle: Integer): Boolean;
+var
+  Bars: TCDScrollBars;
+  Bar: TScrollBar;
+begin
+  Result := False;
+  if Handle = 0 then Exit;
+  Bars := FindScrollBars(Handle);
+  if Bars = nil then Exit;
+  Bar := Bars.GetBar(SBStyle);
+  Result := (Bar <> nil) and Bar.Visible;
 end;
 
 function TCDWidgetSet.GetScrollInfo(Handle: HWND; BarFlag: Integer;

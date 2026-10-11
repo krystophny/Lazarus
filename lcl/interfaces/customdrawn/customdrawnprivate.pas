@@ -185,6 +185,7 @@ var
 
 procedure ForgetBrowserControl(AControl: TWinControl);
 begin
+  CDForgetBrowserFocusReveal(AControl);
   if BrowserMouseTarget = AControl then BrowserMouseTarget := nil;
 end;
 {$endif}

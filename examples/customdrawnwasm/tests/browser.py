@@ -233,6 +233,103 @@ with sync_playwright() as p:
             return color.every((v,i) => p[i] === v);
         }''', arg=[x, y, color])
 
+    # A scroll box reveals both DOM controls and painted children. The lower
+    # button has no OnEnter handler, so reaching it exercises the backend's
+    # focus-to-scroll handoff rather than an application workaround.
+    canvas_box = canvas.bounding_box()
+    canvas_top = canvas_box['y']
+    scroll_source = page.get_by_label('Scroll source')
+    top_scroll_button = page.get_by_role('button', name='Top scroll button', exact=True)
+    scroll_button = page.get_by_role('button', name=re.compile(r'^Scroll button'))
+    scroll_target = page.get_by_label('Scroll target')
+    wait_pixel(636, 455, [255, 0, 0])
+    wait_pixel(526, 455, [0, 0, 255])
+    assert pixel(636, 465) != [255, 0, 0, 255], 'Paint escaped the initial scroll viewport'
+    assert pixel(526, 465) != [0, 0, 255, 255], 'Nested paint escaped the initial scroll viewport'
+    scroll_source.focus()
+    page.keyboard.press('Tab')
+    expect(top_scroll_button).to_be_focused()
+    page.keyboard.press('Tab')
+    expect(scroll_button).to_be_focused()
+
+    def app_rect(locator):
+        return locator.evaluate('''(el) => {
+            const rect = el.getBoundingClientRect();
+            const canvas = document.querySelector('#lcl');
+            const surface = canvas.getBoundingClientRect();
+            return {
+                x: (rect.left - surface.left) * canvas.width / surface.width,
+                y: (rect.top - surface.top) * canvas.height / surface.height,
+                width: rect.width * canvas.width / surface.width,
+                height: rect.height * canvas.height / surface.height
+            };
+        }''')
+
+    def inside_scrollbox(rect):
+        return (rect['x'] >= 344 and rect['x'] + rect['width'] <= 696
+                and rect['y'] >= 280 and rect['y'] + rect['height'] <= 460)
+
+    def click_app(x, y):
+        box = canvas.bounding_box()
+        size = canvas.evaluate('(el) => ({width: el.width, height: el.height})')
+        page.mouse.click(box['x'] + x * box['width'] / size['width'],
+                         box['y'] + y * box['height'] / size['height'])
+
+    button_rect = app_rect(scroll_button)
+    assert inside_scrollbox(button_rect), button_rect
+    assert abs(canvas.bounding_box()['y'] - canvas_top) < 1, 'Focusing a scrolled control moved the page'
+    scroll_button.click()
+    expect(scroll_button).to_have_text('Scroll button clicked')
+    page.keyboard.press('Tab')
+    expect(scroll_target).to_be_focused()
+    target_rect = app_rect(scroll_target)
+    assert inside_scrollbox(target_rect), target_rect
+
+    # The painted child moves with the same scroll offset and remains a real
+    # pointer target after the geometry update.
+    button_top = scroll_button.evaluate('(el) => parseInt(el.style.top, 10)')
+    scroll_offset = 500 - button_top
+    red_x, red_y = 636, 280 + 170 - scroll_offset + 12
+    blue_x, blue_y = 526, 280 + 135 + 35 - scroll_offset + 12
+    wait_pixel(red_x, red_y, [255, 0, 0])
+    wait_pixel(blue_x, blue_y, [0, 0, 255])
+    assert pixel(636, 465) != [255, 0, 0, 255], 'Paint escaped the scrolled viewport'
+    assert pixel(526, 465) != [0, 0, 255, 255], 'Nested paint escaped the scrolled viewport'
+    click_app(red_x, red_y)
+    expect(saved_text).to_have_value('Scroll click 1: ScrollPaint')
+    click_app(blue_x, blue_y)
+    expect(saved_text).to_have_value('Scroll click 2: ScrollNestedPaint')
+
+    # Moving focus back to the top returns the scroll position once. The lower
+    # button remains in the canvas surface but is clipped by the scroll box.
+    scroll_source.focus()
+    page.keyboard.press('Tab')
+    expect(top_scroll_button).to_be_focused()
+    page.keyboard.press('Tab')
+    expect(scroll_button).to_be_focused()
+    page.keyboard.press('Tab')
+    expect(scroll_target).to_be_focused()
+    assert inside_scrollbox(app_rect(scroll_target)), app_rect(scroll_target)
+    click_app(690, 290)
+    page.wait_for_function(
+        '(el) => parseInt(el.style.top, 10) === 500',
+        arg=scroll_button.element_handle())
+    expect(saved_text).to_have_value('Scroll click 2: ScrollNestedPaint')
+    lower_button_hit = scroll_button.evaluate('''el => {
+        const r = el.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === el;
+    }''')
+    assert not lower_button_hit, 'An off-viewport scroll-box button received a DOM pointer hit'
+    assert abs(canvas.bounding_box()['y'] - canvas_top) < 1, 'Scrolling the LCL viewport moved the page'
+    wait_pixel(636, 455, [255, 0, 0])
+    wait_pixel(526, 455, [0, 0, 255])
+    assert pixel(636, 465) != [255, 0, 0, 255], 'Paint escaped after scrolling back'
+    assert pixel(526, 465) != [0, 0, 255, 255], 'Nested paint escaped after scrolling back'
+    click_app(636, 465)
+    expect(saved_text).to_have_value('Scroll click 2: ScrollNestedPaint')
+    click_app(526, 465)
+    expect(saved_text).to_have_value('Scroll click 2: ScrollNestedPaint')
+
     count = page.get_by_role('button', name=re.compile(r'^Count: \d+$'))
     count.click()
     expect(count).to_have_text('Count: 1')

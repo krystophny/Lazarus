@@ -48,6 +48,7 @@ procedure SyncBrowserDOM;
 procedure DispatchBrowserDOMControl(Handle: PtrUInt);
 procedure DispatchBrowserDOMComposition(Handle: PtrUInt; Started: Boolean);
 procedure FocusBrowserDOMControl(Handle: PtrUInt);
+procedure ForgetBrowserFocusReveal(Control: TWinControl);
 implementation
 uses CustomDrawnWSControls, CustomDrawnPrivate, LCLMessageGlue, LCLIntf,
   LMessages, CustomDrawnInt;
@@ -71,6 +72,47 @@ var
   Entries: TFPList;
   Document, Surface, CanvasElement: IJSObject;
   LastDOMFocus: TWinControl;
+  LastRevealedForm: TCustomForm;
+  LastRevealedControl: TWinControl;
+
+procedure RevealFocusedControl;
+var
+  CurrentForm: TCDNonNativeForm;
+  FocusedControl, ParentControl: TWinControl;
+begin
+  CurrentForm := GetCurrentForm;
+  if CurrentForm = nil then
+  begin
+    LastRevealedForm := nil;
+    LastRevealedControl := nil;
+    Exit;
+  end;
+  FocusedControl := CurrentForm.FocusedControl;
+  if (LastRevealedForm = CurrentForm.LCLForm)
+    and (LastRevealedControl = FocusedControl) then Exit;
+  LastRevealedForm := CurrentForm.LCLForm;
+  LastRevealedControl := FocusedControl;
+  if (FocusedControl = nil)
+    or (GetParentForm(FocusedControl) <> CurrentForm.LCLForm) then Exit;
+  ParentControl := FocusedControl.Parent;
+  while ParentControl <> nil do
+  begin
+    if ParentControl is TScrollingWinControl then
+      TScrollingWinControl(ParentControl).ScrollInView(FocusedControl);
+    ParentControl := ParentControl.Parent;
+  end;
+end;
+
+procedure ForgetBrowserFocusReveal(Control: TWinControl);
+begin
+  if LastRevealedControl = Control then
+  begin
+    LastRevealedControl := nil;
+    LastRevealedForm := nil;
+  end;
+  if LastRevealedForm = Control then
+    LastRevealedForm := nil;
+end;
 
 function MemoValueForBrowser(const Value: string): string;
 var
@@ -235,9 +277,12 @@ procedure TDOMControl.Sync;
 var
   Style: IJSObject;
   ActiveElement: IJSObject;
-  Position: TPoint;
-  Value, NewStyle, Display, LabelText: String;
-  Start, Finish, FontSize: Integer;
+  Position, ParentPosition: TPoint;
+  ControlRect, ClipRect, ParentRect, Intersection: TRect;
+  ParentControl: TWinControl;
+  Value, NewStyle, Display, LabelText, ClipPath: String;
+  Start, Finish, FontSize, ClipTop, ClipRight, ClipBottom, ClipLeft: Integer;
+  HasScrollClip, IsClippedOut: Boolean;
   Edit: TCustomEdit;
 begin
   if Updating or (GetCurrentForm = nil) or not Control.HandleAllocated then Exit;
@@ -261,10 +306,50 @@ begin
     Element.InvokeJSNoResult('setAttribute', ['aria-label', LabelText]);
     SyncedLabel := LabelText;
   end;
-  Position := FindControlPositionRelativeToTheForm(Control);
+  Position := FindControlPositionRelativeToTheForm(Control, True);
+  ControlRect := Bounds(Position.X, Position.Y, Control.Width, Control.Height);
+  ClipRect := ControlRect;
+  HasScrollClip := False;
+  IsClippedOut := False;
+  ParentControl := Control.Parent;
+  while ParentControl <> nil do
+  begin
+    if ParentControl is TScrollingWinControl then
+    begin
+      HasScrollClip := True;
+      ParentPosition := FindControlPositionRelativeToTheForm(ParentControl, True);
+      ParentRect := Bounds(ParentPosition.X, ParentPosition.Y,
+        ParentControl.ClientWidth, ParentControl.ClientHeight);
+      if IntersectRect(Intersection, ClipRect, ParentRect) then
+        ClipRect := Intersection
+      else
+      begin
+        IsClippedOut := True;
+        Break;
+      end;
+    end;
+    ParentControl := ParentControl.Parent;
+  end;
+  ClipPath := 'none';
+  if HasScrollClip then
+  begin
+    if IsClippedOut then
+      ClipPath := 'inset(50% 50% 50% 50%)'
+    else
+    begin
+      ClipTop := Max(0, ClipRect.Top-ControlRect.Top);
+      ClipRight := Max(0, ControlRect.Right-ClipRect.Right);
+      ClipBottom := Max(0, ControlRect.Bottom-ClipRect.Bottom);
+      ClipLeft := Max(0, ClipRect.Left-ControlRect.Left);
+      if (ClipTop > 0) or (ClipRight > 0) or (ClipBottom > 0) or (ClipLeft > 0) then
+        ClipPath := Format('inset(%dpx %dpx %dpx %dpx)',
+          [ClipTop, ClipRight, ClipBottom, ClipLeft]);
+    end;
+  end;
   FontSize := Max(13, Abs(Control.Font.Height));
   Display := '';
-  NewStyle := Format('%d,%d,%d,%d,%d,%s', [Position.X, Position.Y, Control.Width, Control.Height, FontSize, Display]);
+  NewStyle := Format('%d,%d,%d,%d,%d,%s,%s',
+    [Position.X, Position.Y, Control.Width, Control.Height, FontSize, Display, ClipPath]);
   if not Initialized or (NewStyle <> SyncedStyle) then
   begin
     Style := Root.ReadJSPropertyObject('style', TJSObject) as IJSObject;
@@ -274,6 +359,7 @@ begin
     Style.WriteJSPropertyUTF8String('height', IntToStr(Control.Height)+'px');
     Style.WriteJSPropertyUTF8String('fontSize', IntToStr(FontSize)+'px');
     Style.WriteJSPropertyUTF8String('display', Display);
+    Style.WriteJSPropertyUTF8String('clipPath', ClipPath);
     SyncedStyle := NewStyle;
   end;
   if Control is TCustomEdit then
@@ -430,6 +516,7 @@ procedure SyncBrowserDOM;
 var
   I: Integer;
 begin
+  RevealFocusedControl;
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do TDOMControl(Entries[I]).Sync;
   FocusCanvasForPaintedControl;
