@@ -69,7 +69,7 @@ procedure BrowserControlUnbind(Handle: LongInt); external 'lcl' name 'control_un
 
 var
   Entries: TFPList;
-  Document, Surface: IJSObject;
+  Document, Surface, CanvasElement: IJSObject;
   LastDOMFocus: TWinControl;
 
 function MemoValueForBrowser(const Value: string): string;
@@ -101,6 +101,33 @@ begin
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do
     if TDOMControl(Entries[I]).Control = Control then Exit(TDOMControl(Entries[I]));
+end;
+
+procedure FocusCanvasForPaintedControl;
+var
+  CurrentForm: TCDNonNativeForm;
+  FocusedControl: TWinControl;
+  LastEntry: TDOMControl;
+  ActiveElement: IJSObject;
+begin
+  if (LastDOMFocus = nil) or (CanvasElement = nil) then Exit;
+  CurrentForm := GetCurrentForm;
+  if CurrentForm = nil then Exit;
+  FocusedControl := CurrentForm.FocusedControl;
+  if (FocusedControl = nil) or (FindEntry(FocusedControl) <> nil) then Exit;
+  if GetParentForm(FocusedControl) <> CurrentForm.LCLForm then Exit;
+
+  LastEntry := FindEntry(LastDOMFocus);
+  if LastEntry = nil then Exit;
+  ActiveElement := Document.ReadJSPropertyObject('activeElement', TJSObject) as IJSObject;
+  if (ActiveElement = nil)
+    or not ActiveElement.InvokeJSBooleanResult('isSameNode', [LastEntry.Element]) then Exit;
+
+  { Painted controls have no DOM node to take focus from the last overlay
+    input. Move browser focus to the canvas so document key events reach LCL. }
+  LastEntry.Element.InvokeJSNoResult('blur', []);
+  CanvasElement.InvokeJSNoResult('focus', []);
+  LastDOMFocus := nil;
 end;
 
 procedure DispatchBrowserDOMControl(Handle: PtrUInt);
@@ -334,6 +361,7 @@ begin
     Entries := TFPList.Create;
     Document := TJSObject.JOBCreateGlobal('document') as IJSObject;
     Surface := Document.InvokeJSObjectResult('getElementById', ['lcl-dom'], TJSObject) as IJSObject;
+    CanvasElement := Document.InvokeJSObjectResult('getElementById', ['lcl'], TJSObject) as IJSObject;
   end;
   Entry := TDOMControl.Create;
   Entry.Control := Control;
@@ -391,6 +419,7 @@ var
 begin
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do TDOMControl(Entries[I]).Sync;
+  FocusCanvasForPaintedControl;
 end;
 
 class function TBrowserWSEdit.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;

@@ -71,6 +71,7 @@ type
   TCDIntfComboBox = class(TCDComboBox)
   {$ifdef CPUWASM32}
   protected
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure ShowSelectItemDialogResult(ASelectedItem: Integer); override;
   {$endif}
   public
@@ -631,6 +632,28 @@ begin
 end;
 
 {$ifdef CPUWASM32}
+procedure TCDIntfComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  NewIndex: Integer;
+begin
+  if Key in [VK_UP, VK_DOWN] then
+  begin
+    if ssAlt in Shift then Exit;
+    if Shift <> [] then
+    begin
+      inherited KeyDown(Key, Shift);
+      Exit;
+    end;
+    NewIndex := ItemIndex;
+    if (Key = VK_DOWN) and (NewIndex < Items.Count - 1) then Inc(NewIndex)
+    else if (Key = VK_UP) and (NewIndex > 0) then Dec(NewIndex);
+    if NewIndex <> ItemIndex then ShowSelectItemDialogResult(NewIndex);
+    Key := 0;
+    Exit;
+  end;
+  inherited KeyDown(Key, Shift);
+end;
+
 procedure TCDIntfComboBox.ShowSelectItemDialogResult(ASelectedItem: Integer);
 begin
   inherited ShowSelectItemDialogResult(ASelectedItem);
