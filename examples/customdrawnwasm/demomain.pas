@@ -38,6 +38,7 @@ type
     CompositionSaved: TEdit;
     CompositionChangeCount: TEdit;
     PaintedCombo: TComboBox;
+    FocusMemoPanel: TPanel;
     procedure CompositionStatusEnter(Sender: TObject);
     procedure PaintedComboEnter(Sender: TObject);
     procedure PaintedComboChange(Sender: TObject);
@@ -54,6 +55,7 @@ type
     procedure DrawingPaint(Sender: TObject);
     procedure DrawingMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
+    procedure FocusMemoPanelDblClick(Sender: TObject);
     procedure CompositionMemoChange(Sender: TObject);
     procedure CompositionMemoCompositionChange(Sender: TObject);
     procedure CompositionMemoKeyDown(Sender: TObject; var Key: Word;
@@ -206,6 +208,11 @@ begin
   FMarkerY := Y;
   FHasMarker := True;
   Drawing.Invalidate;
+end;
+
+procedure TDemoForm.FocusMemoPanelDblClick(Sender: TObject);
+begin
+  CompositionMemo.SetFocus;
 end;
 
 procedure TDemoForm.CompositionMemoChange(Sender: TObject);
