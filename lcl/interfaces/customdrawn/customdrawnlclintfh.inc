@@ -80,7 +80,7 @@ procedure RemoveProcessEventHandler(var AHandler: PProcessEventHandler); overrid
 
 procedure SetEventHandlerFlags(AHandler: PEventHandler; NewFlags: dword); override;
 procedure SetRubberBandRect(const ARubberBand: HWND; const ARect: TRect); override;*)
-function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean; override;
+function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer = -1): Boolean; override;
 {$ifndef CD_HasNativeSelectItemDialog}
 procedure HandleSelectItemDialogClose(ASender: TObject);
 {$endif}
