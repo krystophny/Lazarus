@@ -6351,14 +6351,16 @@ end;
   Sizing is done according to the stretching mode currently set in the
   destination device context.
  ------------------------------------------------------------------------------}
-{ Copies a source rectangle honouring the monochrome mask (set bits are
-  transparent) and the source alpha channel. A source whose alpha is zero
-  throughout the rectangle counts as opaque. Returns False when neither mask
-  nor alpha applies, so the caller can make a plain copy. }
+{ Copies unscaled pixels for SRCCOPY while honoring the monochrome mask and
+  source alpha. Zero alpha throughout the source rectangle is treated as an
+  opaque image, matching the existing CustomDrawn image convention. }
 function CDMaskedAlphaCopy(ADest, ASource: TLazCanvas; AMask: HBITMAP;
   X, Y, XSrc, YSrc, XMask, YMask, Width, Height: Integer): Boolean;
 var
   SrcImage, DestImage, MaskImage: TLazIntfImage;
+  SrcPixels: array of TFPColor;
+  SrcRect, DstRect: TRect;
+  DestOrg: TPoint;
   UseAlpha: Boolean;
   I, J, DestX, DestY: Integer;
   Alpha, InvAlpha: Cardinal;
@@ -6372,6 +6374,7 @@ begin
   if (AMask <> 0) and (TCDBitmap(AMask).Image <> nil) and
     (TCDBitmap(AMask).Image.PixelData <> nil) then
     MaskImage := TCDBitmap(AMask).Image;
+
   UseAlpha := False;
   if SrcImage.DataDescription.AlphaPrec > 0 then
     for J := Max(0, YSrc) to Min(SrcImage.Height, YSrc + Height) - 1 do
@@ -6386,6 +6389,28 @@ begin
     end;
   if not UseAlpha and (MaskImage = nil) then Exit;
   Result := True;
+  DestOrg := ADest.BaseWindowOrg;
+  Inc(DestOrg.X, ADest.WindowOrg.X);
+  Inc(DestOrg.Y, ADest.WindowOrg.Y);
+
+  // Read from the original source when the operation overlaps itself.
+  if (ASource.Image = ADest.Image) and (Width > 0) and (Height > 0) then
+  begin
+    SrcRect := Rect(XSrc, YSrc, XSrc + Width, YSrc + Height);
+    DstRect := Rect(X + DestOrg.X, Y + DestOrg.Y,
+      X + DestOrg.X + Width, Y + DestOrg.Y + Height);
+    if (SrcRect.Left < DstRect.Right) and (DstRect.Left < SrcRect.Right) and
+      (SrcRect.Top < DstRect.Bottom) and (DstRect.Top < SrcRect.Bottom) then
+    begin
+      SetLength(SrcPixels, Width * Height);
+      for J := 0 to Height - 1 do
+        for I := 0 to Width - 1 do
+          if (XSrc + I >= 0) and (YSrc + J >= 0) and
+            (XSrc + I < SrcImage.Width) and (YSrc + J < SrcImage.Height) then
+            SrcPixels[J * Width + I] := SrcImage.Colors[XSrc + I, YSrc + J];
+    end;
+  end;
+
   for J := 0 to Height - 1 do
     for I := 0 to Width - 1 do
     begin
@@ -6394,22 +6419,27 @@ begin
       if (MaskImage <> nil) and (XMask + I >= 0) and (YMask + J >= 0)
         and (XMask + I < MaskImage.Width) and (YMask + J < MaskImage.Height)
         and (MaskImage.Colors[XMask + I, YMask + J].Red >= $8000) then Continue;
-      SrcColor := SrcImage.Colors[XSrc + I, YSrc + J];
+      if Length(SrcPixels) > 0 then
+        SrcColor := SrcPixels[J * Width + I]
+      else
+        SrcColor := SrcImage.Colors[XSrc + I, YSrc + J];
       Alpha := $FFFF;
       if UseAlpha then Alpha := SrcColor.Alpha;
       if Alpha = 0 then Continue;
       if Alpha < $FFFF then
       begin
-        // Background in image coordinates, as TLazCanvas.SetColor writes it.
-        DestX := X + I + ADest.WindowOrg.X;
-        DestY := Y + J + ADest.WindowOrg.Y;
+        DestX := X + I + DestOrg.X;
+        DestY := Y + J + DestOrg.Y;
         if (DestX < 0) or (DestY < 0) or (DestX >= DestImage.Width)
           or (DestY >= DestImage.Height) then Continue;
         DestColor := DestImage.Colors[DestX, DestY];
         InvAlpha := $FFFF - Alpha;
-        SrcColor.Red := (SrcColor.Red * Alpha + DestColor.Red * InvAlpha) div $FFFF;
-        SrcColor.Green := (SrcColor.Green * Alpha + DestColor.Green * InvAlpha) div $FFFF;
-        SrcColor.Blue := (SrcColor.Blue * Alpha + DestColor.Blue * InvAlpha) div $FFFF;
+        SrcColor.Red := Round(
+          DestColor.Red * InvAlpha / $FFFF + SrcColor.Red * Alpha / $FFFF);
+        SrcColor.Green := Round(
+          DestColor.Green * InvAlpha / $FFFF + SrcColor.Green * Alpha / $FFFF);
+        SrcColor.Blue := Round(
+          DestColor.Blue * InvAlpha / $FFFF + SrcColor.Blue * Alpha / $FFFF);
       end;
       SrcColor.Alpha := alphaOpaque;
       ADest.Colors[X + I, Y + J] := SrcColor;
@@ -6442,9 +6472,15 @@ begin
   // Optimization if no stretch is desired
   if (SrcWidth = Width) and (SrcHeight = Height) then
   begin
-    if not CDMaskedAlphaCopy(DstLazDC, SrcLazDC, Mask, X, Y, XSrc, YSrc,
-      XMask, YMask, Width, Height) then
-      DstLazDC.CanvasCopyRect(SrcLazDC, X, Y, XSrc, YSrc, SrcWidth, SrcHeight);
+    if (Rop = SRCCOPY) and
+      CDMaskedAlphaCopy(DstLazDC, SrcLazDC, Mask, X, Y, XSrc, YSrc,
+        XMask, YMask, Width, Height) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    DstLazDC.CanvasCopyRect(SrcLazDC, X, Y, XSrc, YSrc, SrcWidth, SrcHeight);
+    Result := Rop = SRCCOPY;
     Exit;
   end;
 
