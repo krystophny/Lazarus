@@ -178,6 +178,46 @@ with sync_playwright() as p:
     expect(picker.locator('option:checked')).to_have_text('Bold')
     picker.get_by_role('button', name='Cancel').click()
 
+    # The DOM proxy for the painted combo is only the canvas. Tab changes LCL
+    # focus synchronously, while its normal DOM synchronization is deferred to
+    # the next animation frame. A following key in that same frame must still
+    # reach the newly focused painted control.
+    page.keyboard.press('ArrowUp')
+    expect(saved_text).to_have_value('Painted combo: Regular')
+    focus_source.focus()
+    expect(focus_source).to_be_focused()
+    page.evaluate('''() => new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)))''')
+    page.evaluate('''() => {
+        const nativeRequestAnimationFrame = window.requestAnimationFrame;
+        const pendingFrames = [];
+        window.requestAnimationFrame = callback => {
+            pendingFrames.push(callback);
+            return pendingFrames.length;
+        };
+        window.releaseHeldFrames = () => {
+            window.requestAnimationFrame = nativeRequestAnimationFrame;
+            for (const callback of pendingFrames.splice(0)) callback(performance.now());
+            delete window.releaseHeldFrames;
+        };
+    }''')
+    page.keyboard.press('Tab')
+    dom_focus_after_tab = page.evaluate('''() => {
+        const active = document.activeElement;
+        return [active.tagName, active.id, active.getAttribute('aria-label')];
+    }''')
+    page.keyboard.press('ArrowDown')
+    page.keyboard.press('Shift+Tab')
+    assert dom_focus_after_tab[:2] == ['CANVAS', 'lcl'], (
+        f'Tab did not move DOM focus to the canvas before the next frame: {dom_focus_after_tab}')
+    assert focus_source.evaluate('(el) => el === document.activeElement'), (
+        'Shift+Tab did not synchronously return DOM focus to Composition value')
+    page.evaluate('window.releaseHeldFrames()')
+    actual_saved_text = saved_text.input_value()
+    assert actual_saved_text == 'Painted combo: Bold', (
+        'ArrowDown in the same frame as Tab did not reach the painted combo; '
+        f'DOM focus after Tab was {dom_focus_after_tab}, saved text was {actual_saved_text!r}')
+
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')
 

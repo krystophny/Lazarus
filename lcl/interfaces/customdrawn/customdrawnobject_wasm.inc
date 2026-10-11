@@ -271,6 +271,9 @@ begin
     2: CallbackKeyChar(Form, Word(Key), UnicodeToUTF8(CharCode));
   end;
   LCLWasmIdle;
+  { Tab can change LCL focus immediately, while the normal DOM focus sync is
+    deferred to the next paint. Keep the next browser key on the new control. }
+  if Kind = 0 then SyncBrowserDOM;
 end;
 
 procedure LCLWasmWheel(X, Y, Delta, Modifiers: LongInt); cdecl;
