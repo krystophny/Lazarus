@@ -65,6 +65,7 @@ type
     destructor Destroy; override;
   end;
 procedure BrowserControlBind(Handle: LongInt; ID: PChar; Count: LongInt); external 'lcl' name 'control_bind';
+procedure BrowserControlUnbind(Handle: LongInt); external 'lcl' name 'control_unbind';
 
 var
   Entries: TFPList;
@@ -304,6 +305,7 @@ destructor TDOMControl.Destroy;
 begin
   if LastDOMFocus = Control then LastDOMFocus := nil;
   { Detach the handler before its Pascal target can be freed. }
+  BrowserControlUnbind(PtrUInt(Control));
   Element.WriteJSPropertyObject('onclick', nil);
   Element.WriteJSPropertyObject('oninput', nil);
   Element.WriteJSPropertyObject('onfocus', nil);

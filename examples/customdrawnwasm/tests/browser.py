@@ -28,8 +28,10 @@ with sync_playwright() as p:
     composition = page.get_by_label('Composition status')
     value = page.get_by_label('Composition value')
     saved_text = page.get_by_label('Saved text')
+    change_count = page.get_by_label('Memo change count')
     expect(composition).to_have_value('Composition: idle')
     expect(saved_text).to_have_value('Saved: none')
+    expect(change_count).to_have_value('Changes: 0')
     memo.evaluate('''el => {
         el.focus();
         el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
@@ -45,20 +47,36 @@ with sync_playwright() as p:
     expect(composition).to_have_value('Composition: idle')
     expect(value).to_have_value('Value: かな😀')
     expect(saved_text).to_have_value('Saved: かな😀')
+    expect(change_count).to_have_value('Changes: 1')
     memo.focus()
     page.keyboard.press('Control+Enter')
     expect(composition).to_have_value('Ctrl+Enter routed')
     page.get_by_role('button', name='Set memo text', exact=True).click()
+    expect(memo).to_have_value('setter')
+    expect(value).to_have_value('Value: setter')
+    expect(change_count).to_have_value('Changes: 1')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Saved: setter')
+    page.get_by_role('button', name='Set memo text', exact=True).click()
     expect(memo).to_have_value('setter\n')
     expect(value).to_have_value('Value: setter<LF>')
-    page.get_by_role('button', name='Save text', exact=True).click()
-    expect(saved_text).to_have_value('Saved: setter<LF>')
+    expect(change_count).to_have_value('Changes: 1')
+    old_memo = memo.element_handle()
     page.get_by_role('button', name='Recreate memo', exact=True).click()
     expect(memo).to_have_value('setter\n')
     expect(value).to_have_value('Value: setter<LF>')
+    expect(change_count).to_have_value('Changes: 1')
     page.get_by_role('button', name='Save text', exact=True).click()
     expect(saved_text).to_have_value('Saved: setter<LF>')
-    for memo_text in ['', 'alpha', 'alpha\nbeta', 'alpha\n', 'alpha\nbeta\n']:
+    old_memo.evaluate('''el => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    }''')
+    expect(composition).to_have_value('Ctrl+Enter routed')
+    expect(memo).to_have_value('setter\n')
+    expect(change_count).to_have_value('Changes: 1')
+    for change_number, memo_text in enumerate(
+            ['', 'alpha', 'alpha\nbeta', 'alpha\n', 'alpha\nbeta\n'], 2):
         memo.evaluate('''(el, value) => {
             el.value = value;
             el.dispatchEvent(new Event('input', {bubbles:true}));
@@ -68,9 +86,22 @@ with sync_playwright() as p:
         expect(value).to_have_value('Value: ' + value_text)
         page.get_by_role('button', name='Save text', exact=True).click()
         expect(saved_text).to_have_value('Saved: ' + value_text)
+        expect(change_count).to_have_value('Changes: ' + str(change_number))
     page.get_by_role('button', name='Destroy on change', exact=True).click()
-    memo.evaluate("el => { el.value = 'destroy'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+    old_memo = memo.element_handle()
+    old_memo.evaluate('''el => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.value = 'destroy';
+        el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'destroy'}));
+    }''')
     expect(value).to_have_value('Memo destroyed')
+    expect(change_count).to_have_value('Changes: 7')
+    old_memo.evaluate('''el => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    }''')
+    expect(composition).to_have_value('Composition: idle')
+    expect(change_count).to_have_value('Changes: 7')
 
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')

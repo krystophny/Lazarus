@@ -36,6 +36,7 @@ type
     CompositionStatus: TEdit;
     CompositionValue: TEdit;
     CompositionSaved: TEdit;
+    CompositionChangeCount: TEdit;
     procedure CounterButtonClick(Sender: TObject);
     procedure ResetButtonClick(Sender: TObject);
     procedure SaveFileButtonClick(Sender: TObject);
@@ -58,6 +59,7 @@ type
     FHasMarker: Boolean;
     FCompositionSavePending: Boolean;
     FDestroyMemoOnChange: Boolean;
+    FMemoChangeCount: Integer;
     FLastSaveFileName: string;
     FLastSaveAtomic: Boolean;
     function WriteBrowserFile(const FileName: string; Atomic,
@@ -205,11 +207,14 @@ procedure TDemoForm.CompositionMemoChange(Sender: TObject);
 var
   MemoText: String;
 begin
+  Inc(FMemoChangeCount);
+  CompositionChangeCount.Text := 'Changes: ' + IntToStr(FMemoChangeCount);
   MemoText := CompositionMemo.Text;
   CompositionValue.Text := 'Value: ' + DisplayMemoText(MemoText);
   if FDestroyMemoOnChange then
   begin
     FDestroyMemoOnChange := False;
+    CompositionStatus.Text := 'Composition: idle';
     FreeAndNil(CompositionMemo);
     CompositionValue.Text := 'Memo destroyed';
   end;
@@ -248,7 +253,10 @@ end;
 
 procedure TDemoForm.SetMemoTextButtonClick(Sender: TObject);
 begin
-  CompositionMemo.Text := 'setter' + LineEnding;
+  if CompositionMemo.Text = 'setter' then
+    CompositionMemo.Text := 'setter' + LineEnding
+  else
+    CompositionMemo.Text := 'setter';
   CompositionValue.Text := 'Value: ' + DisplayMemoText(CompositionMemo.Text);
 end;
 
@@ -268,22 +276,30 @@ var
   ProbeMemo: TMemo;
   ExpectedText: String;
 begin
-  ExpectedText := 'unhandled' + LineEnding;
   ProbeMemo := TMemo.Create(nil);
   try
+    ExpectedText := 'unhandled';
     ProbeMemo.Text := ExpectedText;
     if ProbeMemo.HandleAllocated or (ProbeMemo.Text <> ExpectedText) then
-      raise Exception.Create('Unhandled memo Text did not preserve its value');
+      raise Exception.Create('Unhandled memo Text lost a missing final newline');
+    ExpectedText := 'unhandled' + LineEnding;
+    ProbeMemo.Text := ExpectedText;
+    if ProbeMemo.HandleAllocated or (ProbeMemo.Text <> ExpectedText) then
+      raise Exception.Create('Unhandled memo Text lost an intentional final newline');
   finally
     ProbeMemo.Free;
   end;
 
-  ExpectedText := 'seed' + LineEnding;
+  ExpectedText := 'seed';
   if CompositionMemo.HandleAllocated then
     raise Exception.Create('Memo handle was allocated before OnCreate');
   CompositionMemo.Text := ExpectedText;
   if CompositionMemo.Text <> ExpectedText then
     raise Exception.Create('Pre-handle memo Text setter lost its value');
+  ExpectedText := 'seed' + LineEnding;
+  CompositionMemo.Text := ExpectedText;
+  if CompositionMemo.Text <> ExpectedText then
+    raise Exception.Create('Pre-handle memo Text setter lost its final newline');
   CompositionValue.Text := 'Value: ' + DisplayMemoText(CompositionMemo.Text);
 end;
 

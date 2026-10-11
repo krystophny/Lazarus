@@ -42,6 +42,7 @@ function measureText(value) {
 }
 const messageWaiters = [];
 let activeForm = 0;
+const compositionBindings = new Map();
 let pointerIdleTimer, lastHoverMove = 0;
 let fileSystem;
 const downloadPaths = new Set();
@@ -139,10 +140,12 @@ const imports = {
     const element = document.getElementById(text(idPtr, idLen));
     let composing = false;
     const dispatch = () => guarded(async () => {
+      if (!element.isConnected) return;
       await api.lcl_control(pointer);
       wakeMessage();
     });
     const composition = started => guarded(async () => {
+      if (!element.isConnected) return;
       await api.lcl_composition(pointer, Number(started));
       wakeMessage();
     });
@@ -161,22 +164,36 @@ const imports = {
     };
     if (editable) {
       element.oninput = event => { if (!composing && !event.isComposing) dispatch(); };
-      element.addEventListener('compositionstart', () => {
+      const compositionStart = () => {
         composing = true;
         composition(true);
-      });
-      element.addEventListener('compositionend', () => {
+      };
+      const compositionEnd = () => {
         guarded(async () => {
+          if (!element.isConnected) return;
           // Copy the final DOM value into Pascal before lifting its composition
           // gate, so a pending Save cannot commit the previous draft.
           await api.lcl_control(pointer);
+          // The text-change callback above may destroy the control and detach
+          // this element. Do not route compositionend through a stale pointer.
+          if (!element.isConnected) return;
           composing = false;
           await api.lcl_composition(pointer, 0);
           wakeMessage();
         });
-      });
+      };
+      element.addEventListener('compositionstart', compositionStart);
+      element.addEventListener('compositionend', compositionEnd);
+      compositionBindings.set(pointer, {element, compositionStart, compositionEnd});
       element.onselect = () => { if (!composing) dispatch(); };
     } else element.onclick = event => { event.stopPropagation(); dispatch(); };
+  },
+  control_unbind: pointer => {
+    const binding = compositionBindings.get(pointer);
+    if (!binding) return;
+    binding.element.removeEventListener('compositionstart', binding.compositionStart);
+    binding.element.removeEventListener('compositionend', binding.compositionEnd);
+    compositionBindings.delete(pointer);
   },
   title: (pointer, length) => { document.title = text(pointer, length); },
   cursor: index => { canvas.style.cursor = standardCursors[-index] || 'default'; },

@@ -189,7 +189,10 @@ begin
   Lines.Text := AValue;
   if HandleAllocated and
     TWSCustomMemoClass(WidgetSetClass).GetText(Self, WidgetText) then
-    TWSCustomMemoClass(WidgetSetClass).SetText(Self, AValue);
+  begin
+    if WidgetText <> AValue then
+      TWSCustomMemoClass(WidgetSetClass).SetText(Self, AValue);
+  end;
   fTExtChangedByRealSetText:=False;
 end;
 

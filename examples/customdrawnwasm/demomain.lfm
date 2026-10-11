@@ -108,13 +108,23 @@ object DemoForm: TDemoForm
     OnClick = RecreateMemoButtonClick
     TabOrder = 11
   end
+  object CompositionChangeCount: TEdit
+    Left = 534
+    Top = 156
+    Width = 166
+    Height = 26
+    ReadOnly = True
+    Text = 'Changes: 0'
+    Hint = 'Memo change count'
+    TabOrder = 12
+  end
   object HintLabel: TLabel
     Left = 344
     Top = 156
-    Width = 356
+    Width = 180
     Height = 26
     AutoSize = False
-    Caption = 'Click below to place a green marker. Reset clears it.'
+    Caption = 'Click canvas; Reset clears marker.'
   end
   object CompositionMemo: TCompositionMemo
     Left = 24
