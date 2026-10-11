@@ -691,6 +691,7 @@ exports
   LCLWasmWheel name 'lcl_wheel',
   LCLWasmTimer name 'lcl_timer',
   LCLWasmControl name 'lcl_control',
+  LCLWasmComposition name 'lcl_composition',
   LCLWasmFocus name 'lcl_focus',
   LCLWasmMenu name 'lcl_menu',
   LCLWasmIdle name 'lcl_idle';

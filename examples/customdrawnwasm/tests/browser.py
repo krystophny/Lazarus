@@ -20,6 +20,89 @@ with sync_playwright() as p:
     page.wait_for_selector('#status[data-state=ready]')
     page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
 
+    # A real LCL memo is backed by a DOM textarea. Composition is held outside
+    # the Pascal value until compositionend, then the committed Unicode value is
+    # delivered before Ctrl+Enter is routed through the LCL key callback.
+    memo = page.locator('#lcl-dom textarea')
+    expect(memo).to_have_value('seed\n')
+    composition = page.get_by_label('Composition status')
+    value = page.get_by_label('Composition value')
+    saved_text = page.get_by_label('Saved text')
+    change_count = page.get_by_label('Memo change count')
+    expect(composition).to_have_value('Composition: idle')
+    expect(saved_text).to_have_value('Saved: none')
+    expect(change_count).to_have_value('Changes: 0')
+    memo.evaluate('''el => {
+        el.focus();
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.value = 'かな😀';
+        el.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertCompositionText',
+            data:'かな😀', isComposing:true}));
+    }''')
+    expect(composition).to_have_value('Composition: active')
+    expect(value).to_have_value('Value: seed<LF>')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Save pending')
+    memo.evaluate("el => el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'かな😀'}))")
+    expect(composition).to_have_value('Composition: idle')
+    expect(value).to_have_value('Value: かな😀')
+    expect(saved_text).to_have_value('Saved: かな😀')
+    expect(change_count).to_have_value('Changes: 1')
+    memo.focus()
+    page.keyboard.press('Control+Enter')
+    expect(composition).to_have_value('Ctrl+Enter routed')
+    page.get_by_role('button', name='Set memo text', exact=True).click()
+    expect(memo).to_have_value('setter')
+    expect(value).to_have_value('Value: setter')
+    expect(change_count).to_have_value('Changes: 1')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Saved: setter')
+    page.get_by_role('button', name='Set memo text', exact=True).click()
+    expect(memo).to_have_value('setter\n')
+    expect(value).to_have_value('Value: setter<LF>')
+    expect(change_count).to_have_value('Changes: 1')
+    old_memo = memo.element_handle()
+    page.get_by_role('button', name='Recreate memo', exact=True).click()
+    expect(memo).to_have_value('setter\n')
+    expect(value).to_have_value('Value: setter<LF>')
+    expect(change_count).to_have_value('Changes: 1')
+    page.get_by_role('button', name='Save text', exact=True).click()
+    expect(saved_text).to_have_value('Saved: setter<LF>')
+    old_memo.evaluate('''el => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    }''')
+    expect(composition).to_have_value('Ctrl+Enter routed')
+    expect(memo).to_have_value('setter\n')
+    expect(change_count).to_have_value('Changes: 1')
+    for change_number, memo_text in enumerate(
+            ['', 'alpha', 'alpha\nbeta', 'alpha\n', 'alpha\nbeta\n'], 2):
+        memo.evaluate('''(el, value) => {
+            el.value = value;
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+        }''', memo_text)
+        expect(memo).to_have_value(memo_text)
+        value_text = memo_text.replace('\r', '<CR>').replace('\n', '<LF>')
+        expect(value).to_have_value('Value: ' + value_text)
+        page.get_by_role('button', name='Save text', exact=True).click()
+        expect(saved_text).to_have_value('Saved: ' + value_text)
+        expect(change_count).to_have_value('Changes: ' + str(change_number))
+    page.get_by_role('button', name='Destroy on change', exact=True).click()
+    old_memo = memo.element_handle()
+    old_memo.evaluate('''el => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.value = 'destroy';
+        el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:'destroy'}));
+    }''')
+    expect(value).to_have_value('Memo destroyed')
+    expect(change_count).to_have_value('Changes: 7')
+    old_memo.evaluate('''el => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    }''')
+    expect(composition).to_have_value('Composition: idle')
+    expect(change_count).to_have_value('Changes: 7')
+
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')
 
@@ -135,6 +218,7 @@ with sync_playwright() as p:
     assert page.locator('#status').get_attribute('data-state') == 'ready'
     assert not errors, errors
     print(json.dumps({'dom_mouse_and_keyboard': True, 'pascal_canvas_colors': True,
+                      'dom_textarea_composition_unicode_and_ctrl_enter': True,
                       'checkbox_changes_lcl_paint': True, 'canvas_pointer_and_reset': True,
                       'anchored_resize': True, 'callback_cycles': 100,
                       'direct_download': True, 'default_extension': True,
