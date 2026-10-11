@@ -37,7 +37,10 @@ type
     CompositionValue: TEdit;
     CompositionSaved: TEdit;
     CompositionChangeCount: TEdit;
+    PaintedCombo: TComboBox;
     procedure CompositionStatusEnter(Sender: TObject);
+    procedure PaintedComboEnter(Sender: TObject);
+    procedure PaintedComboChange(Sender: TObject);
     procedure CounterButtonClick(Sender: TObject);
     procedure ResetButtonClick(Sender: TObject);
     procedure SaveFileButtonClick(Sender: TObject);
@@ -239,6 +242,16 @@ end;
 procedure TDemoForm.CompositionStatusEnter(Sender: TObject);
 begin
   Application.QueueAsyncCall(@FocusIdleCallback, 0);
+end;
+
+procedure TDemoForm.PaintedComboEnter(Sender: TObject);
+begin
+  CompositionSaved.Text := 'Painted combo focused';
+end;
+
+procedure TDemoForm.PaintedComboChange(Sender: TObject);
+begin
+  CompositionSaved.Text := 'Painted combo: ' + PaintedCombo.Text;
 end;
 
 procedure TDemoForm.FocusIdleCallback(Data: PtrInt);
