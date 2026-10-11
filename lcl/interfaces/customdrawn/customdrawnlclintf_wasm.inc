@@ -149,7 +149,7 @@ begin
   { Browser input focus controls the platform keyboard. }
 end;
 
-function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;
+function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer): Boolean;
 var
   Data: TJSONObject;
   Items: TJSONArray;
@@ -158,7 +158,8 @@ var
 begin
   Result := False;
   if AItems.Count = 0 then Exit;
-  Data := TJSONObject.Create(['kind', 'select', 'caption', 'Choose item']);
+  Data := TJSONObject.Create(['kind', 'select', 'caption', 'Choose item',
+    'selectedIndex', ASelectedIndex]);
   try
     Items := TJSONArray.Create;
     Data.Add('items', Items);

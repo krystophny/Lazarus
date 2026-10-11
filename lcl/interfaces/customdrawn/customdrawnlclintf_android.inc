@@ -272,7 +272,7 @@ begin
   ARawImage.Init;
 end;
 
-function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;
+function TCDWidgetset.ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer): Boolean;
 var
   javaAndroidAppAlertDialogBuilderClass: JClass = nil;
   javaCharSequence: JClass = nil;
@@ -322,7 +322,7 @@ begin
     javaEnvRef^^.SetObjectArrayElement(javaEnvRef, javaObjectArray, i, lJavaString);
     __android_log_write(ANDROID_LOG_INFO, 'lclapp', PChar('[TCDWidgetset.ShowSelectItemDialog] Adding string='+AItems.Strings[i]+' lJavaString='+IntToStr(PtrInt(lJavaString))));
   end;
-  lParams[1].i := -1;
+  lParams[1].i := ASelectedIndex;
   lParams[2].l := javaAlertDialog;
   {$ifdef VerboseCDShowSelectItemDialog}
   DebugLn('[TCDWidgetset.ShowSelectItemDialog] JavaMethod_LCLDoPrepareSelectItemDialog='+IntToStr(PtrInt(JavaMethod_LCLDoPrepareSelectItemDialog)));

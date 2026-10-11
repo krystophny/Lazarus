@@ -136,6 +136,29 @@ with sync_playwright() as p:
     expect(saved_text).to_have_value('Painted combo: Bold')
     expect(focus_source).to_have_value('Memo destroyed')
 
+    def open_painted_combo_picker():
+        canvas = page.locator('#lcl')
+        canvas_box = canvas.bounding_box()
+        canvas_width, canvas_height = canvas.evaluate('(el) => [el.width, el.height]')
+        page.mouse.click(canvas_box['x'] + 686 * canvas_box['width'] / canvas_width,
+                         canvas_box['y'] + 139 * canvas_box['height'] / canvas_height)
+        picker = page.get_by_role('dialog', name='Choose item')
+        expect(picker).to_be_visible()
+        return picker
+
+    picker = open_painted_combo_picker()
+    expect(picker.locator('option:checked')).to_have_text('Bold')
+    picker.get_by_role('button', name='Cancel').click()
+    expect(saved_text).to_have_value('Painted combo: Bold')
+
+    picker = open_painted_combo_picker()
+    expect(picker.locator('option:checked')).to_have_text('Bold')
+    picker.get_by_role('button', name='OK').click()
+    expect(saved_text).to_have_value('Painted combo: Bold')
+    picker = open_painted_combo_picker()
+    expect(picker.locator('option:checked')).to_have_text('Bold')
+    picker.get_by_role('button', name='Cancel').click()
+
     def frame():
         return page.locator('#lcl').get_attribute('data-frames')
 

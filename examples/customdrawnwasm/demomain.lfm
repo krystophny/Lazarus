@@ -55,7 +55,7 @@ object DemoForm: TDemoForm
   end
   object FailRenameCheckBox: TCheckBox
     Left = 580
-    Top = 112
+    Top = 190
     Width = 130
     Height = 30
     Caption = 'Fail rename'

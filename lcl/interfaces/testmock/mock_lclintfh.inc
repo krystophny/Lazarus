@@ -108,7 +108,7 @@ function SetCaretRespondToFocus(handle: HWND; ShowHideOnFocus: boolean): Boolean
 function SetComboMinDropDownSize(Handle: HWND; MinItemsWidth, MinItemsHeight, MinItemCount: integer): boolean; override;
 procedure SetEventHandlerFlags(AHandler: PEventHandler; NewFlags: dword); override;
 procedure SetRubberBandRect(const ARubberBand: HWND; const ARect: TRect); override;
-function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;override;
+function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer = -1): Boolean;override;
 function StretchMaskBlt(DestDC: HDC; X, Y, Width, Height: Integer; SrcDC: HDC; XSrc, YSrc, SrcWidth, SrcHeight: Integer; Mask: HBITMAP; XMask, YMask: Integer; Rop: DWORD): Boolean; override;
 
 function TextUTF8Out(DC: HDC; X, Y: Integer;  Str: PChar; Count: Longint): Boolean;  override;
