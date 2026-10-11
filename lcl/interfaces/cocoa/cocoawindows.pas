@@ -346,7 +346,7 @@ begin
              handled := NSApplication(NSApp).sendAction_to_from(objcselector('paste:'), atarget, asender);
       'x': if msk = NSCommandKeyMask then
              handled := NSApplication(NSApp).sendAction_to_from(objcselector('cut:'), atarget, asender);
-      'z': if msk = NSCommandKeyMask then
+      'z', 'Z': if msk = NSCommandKeyMask then
       begin
         undoManager := atarget.undoManager;
         if Assigned(undoManager) and undoManager.canUndo then
@@ -354,7 +354,7 @@ begin
           handled := true;
           undoManager.undo;
         end;
-      end;
+      end
       else if msk = (NSCommandKeyMask or NSShiftKeyMask) then
       begin
         undoManager := atarget.undoManager;
