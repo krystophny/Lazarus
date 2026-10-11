@@ -51,6 +51,7 @@ type
     procedure SetMemoTextButtonClick(Sender: TObject);
     procedure RecreateMemoButtonClick(Sender: TObject);
     procedure DemoFormCreate(Sender: TObject);
+    function IsShortcut(var Message: TLMKey): Boolean; override;
     procedure FilledCheckBoxChange(Sender: TObject);
     procedure DrawingPaint(Sender: TObject);
     procedure DrawingMouseDown(Sender: TObject; Button: TMouseButton;
@@ -61,7 +62,7 @@ type
     procedure CompositionMemoKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
   private
-    FCount, FMarkerX, FMarkerY: Integer;
+    FCount, FMarkerX, FMarkerY, FShortcutCount: Integer;
     FHasMarker: Boolean;
     FCompositionSavePending: Boolean;
     FDestroyMemoOnChange: Boolean;
@@ -100,6 +101,19 @@ begin
   Inc(FCount);
   CounterButton.Caption := 'Count: '+IntToStr(FCount);
 end;
+
+function TDemoForm.IsShortcut(var Message: TLMKey): Boolean;
+begin
+  if Message.CharCode = VK_F2 then
+  begin
+    Inc(FShortcutCount);
+    CompositionSaved.Text := 'F2 shortcuts: ' + IntToStr(FShortcutCount);
+    Result := True;
+  end
+  else
+    Result := inherited IsShortcut(Message);
+end;
+
 procedure TDemoForm.ResetButtonClick(Sender: TObject);
 begin
   FCount := 0;
