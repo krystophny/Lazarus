@@ -107,14 +107,23 @@ type
   { TCocoaWindow }
 
   TCocoaWindowContent = objcclass;
+  { A unique token distinguishes queued requests for the same responder. }
+  TCocoaFocusRequestToken = objcclass(NSObject)
+  public
+    responder: NSResponder;
+    procedure dealloc; override;
+  end;
 
   TCocoaWindow = objcclass(NSWindow, NSWindowDelegateProtocol)
   private
     // for the reentrancy of makeFirstResponder()
     makeFirstResponderCount: Integer;
+    pendingFirstResponderRequest: TCocoaFocusRequestToken;
+    procedure cancelPendingFirstResponderRequest;
+      message 'lclCancelPendingFirstResponderRequest';
   private
     procedure DoWindowDidBecomeKey(); message 'DoWindowDidBecomeKey';
-    procedure DoMakeFirstResponder(aResponder: NSResponder); message 'DoMakeFirstResponder:';
+    procedure DoMakeFirstResponder(aRequest: TCocoaFocusRequestToken); message 'DoMakeFirstResponder:';
   protected
     fieldEditor: TCocoaFieldEditor;
     firedMouseEvent: Boolean;
@@ -782,6 +791,7 @@ end;
 
 procedure TCocoaWindow.windowWillClose(notification: NSNotification);
 begin
+  cancelPendingFirstResponderRequest;
   if Assigned(callback) then
     callback.Close;
 end;
@@ -864,6 +874,7 @@ end;
 
 procedure TCocoaWindow.dealloc;
 begin
+  cancelPendingFirstResponderRequest;
   if (fieldEditor <> nil) then
   begin
     fieldEditor.release;
@@ -1016,15 +1027,26 @@ function TCocoaWindow.makeFirstResponder( aResponder : NSResponder ): ObjCBOOL;
 var
   lastResponder : NSResponder;
   newResponder : NSResponder;
+  pendingRequestAtEntry: TCocoaFocusRequestToken;
   lastCb : ICommonCallback;
   newCb : ICommonCallback;
   newRespsonderClassName: String;
 begin
+  pendingRequestAtEntry := pendingFirstResponderRequest;
+  if pendingRequestAtEntry <> nil then
+    pendingRequestAtEntry.retain;
   inc( makeFirstResponderCount );
   try
     lastResponder := self.firstResponder;
     newResponder := getProperFocusedResponder( self, aResponder );
-    if lastResponder = newResponder then exit;
+    if lastResponder = newResponder then
+    begin
+      Result := True;
+      if (pendingRequestAtEntry <> nil) and
+         (pendingFirstResponderRequest = pendingRequestAtEntry) then
+        cancelPendingFirstResponderRequest;
+      exit;
+    end;
 
     // get the callback of lastResponder first, because the callback of
     // lastResponder may be changed dynamically.
@@ -1036,6 +1058,9 @@ begin
     // Result=false when the focused control has not been changed
     // TCocoaWindow.makeFirstResponder() may be triggered reentrant here
     Result := inherited makeFirstResponder( newResponder );
+    if Result and (pendingRequestAtEntry <> nil) and
+       (pendingFirstResponderRequest = pendingRequestAtEntry) then
+      cancelPendingFirstResponderRequest;
     if not Result then exit;
 
     // send KillFocus/SetFocus messages to LCL only at level one
@@ -1060,27 +1085,65 @@ begin
 
     newRespsonderClassName:= newResponder.lclClassName;
   finally
+    if pendingRequestAtEntry <> nil then
+      pendingRequestAtEntry.release;
     dec( makeFirstResponderCount );
   end;
 end;
 
 function TCocoaWindow.makeFirstResponderFromLCL(aResponder: NSResponder): ObjCBOOL;
+var
+  request: TCocoaFocusRequestToken;
 begin
   if makeFirstResponderCount=0 then begin
     // not in makeFirstResponder processing, call makeFirstResponder directly
     Result:= makeFirstResponder( aResponder );
   end else begin
     // otherwise, delay processing after makeFirstResponder
-    aResponder.retain;
-    performSelector_withObject_afterDelay( ObjCSelector('DoMakeFirstResponder:'), aResponder, 0 );
+    cancelPendingFirstResponderRequest;
+    request := TCocoaFocusRequestToken.alloc.init;
+    if aResponder <> nil then
+      request.responder := NSResponder(aResponder.retain);
+    pendingFirstResponderRequest := request;
+    performSelector_withObject_afterDelay(
+      ObjCSelector('DoMakeFirstResponder:'), request, 0);
     Result:= true;
   end;
 end;
 
-procedure TCocoaWindow.DoMakeFirstResponder(aResponder: NSResponder);
+procedure TCocoaWindow.cancelPendingFirstResponderRequest;
+var
+  request: TCocoaFocusRequestToken;
 begin
-  makeFirstResponder( aResponder );
-  aResponder.release;
+  request := pendingFirstResponderRequest;
+  if request = nil then
+    Exit;
+  pendingFirstResponderRequest := nil;
+  cancelPreviousPerformRequestsWithTarget_selector_object(
+    Self, ObjCSelector('DoMakeFirstResponder:'), request);
+  request.release;
+end;
+
+procedure TCocoaWindow.DoMakeFirstResponder(aRequest: TCocoaFocusRequestToken);
+begin
+  if pendingFirstResponderRequest <> aRequest then
+    Exit;
+  pendingFirstResponderRequest := nil;
+  try
+    makeFirstResponder(aRequest.responder);
+  finally
+    aRequest.release;
+  end;
+end;
+
+procedure TCocoaFocusRequestToken.dealloc;
+begin
+  if responder <> nil then
+  begin
+    responder.release;
+    responder := nil;
+  end;
+  inherited dealloc;
 end;
 
 
