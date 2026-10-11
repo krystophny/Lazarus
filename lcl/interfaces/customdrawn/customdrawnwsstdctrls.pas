@@ -1004,7 +1004,12 @@ var
   lCDWinControl: TCDWinControl;
 begin
   Result := False;
+  { Memos store their text in Lines, which TCustomMemo.FinalizeWnd copies
+    separately. GetText is only the edit-caption fallback; reading it for a
+    memo can access its freed Lines alias during destruction. }
+  if AWinControl is TCustomMemo then Exit;
   lCDWinControl := TCDWinControl(AWinControl.Handle);
+  if lCDWinControl = nil then Exit;
   if lCDWinControl.CDControl = nil then Exit;
   AText := TCDIntfComboBox(lCDWinControl.CDControl).Text;
   Result := True;

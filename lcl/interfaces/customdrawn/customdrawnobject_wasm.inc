@@ -149,6 +149,12 @@ begin
   LCLWasmIdle;
 end;
 
+procedure LCLWasmComposition(Handle, Started: LongInt); cdecl;
+begin
+  DispatchBrowserDOMComposition(PtrUInt(Handle), Started <> 0);
+  LCLWasmIdle;
+end;
+
 procedure LCLWasmLeave; cdecl;
 var
   Form: TCDNonNativeForm;
