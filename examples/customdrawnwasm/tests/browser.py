@@ -32,6 +32,18 @@ with sync_playwright() as p:
     expect(composition).to_have_value('Composition: idle')
     expect(saved_text).to_have_value('Saved: none')
     expect(change_count).to_have_value('Changes: 0')
+
+    # LCL Tab traversal must move browser focus too. If it leaves DOM focus on
+    # the textarea, typing after the move still changes the memo invisibly.
+    memo.focus()
+    page.keyboard.press('Tab')
+    destroy_on_change = page.get_by_role('button', name='Destroy on change', exact=True)
+    expect(destroy_on_change).to_be_focused()
+    page.keyboard.press('x')
+    expect(memo).to_have_value('seed\n')
+    page.keyboard.press('Shift+Tab')
+    expect(memo).to_be_focused()
+
     memo.evaluate('''el => {
         el.focus();
         el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));

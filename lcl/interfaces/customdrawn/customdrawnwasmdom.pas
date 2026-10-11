@@ -285,11 +285,6 @@ begin
       else Element.InvokeJSNoResult('removeAttribute', ['maxlength']);
       SyncedMaxLength := Edit.MaxLength;
     end;
-    if Control.CanFocus and (GetCurrentForm.FocusedControl = Control) and (LastDOMFocus <> Control) then
-    begin
-      LastDOMFocus := Control;
-      Element.InvokeJSNoResult('focus', []);
-    end;
   end
   else if not Initialized or (SyncedText <> Control.Caption) then
   begin
@@ -298,6 +293,14 @@ begin
   end;
   if not Initialized or (SyncedEnabled <> Control.Enabled) then Element.WriteJSPropertyBoolean('disabled', not Control.Enabled);
   SyncedEnabled := Control.Enabled;
+  { Keep DOM focus in step with LCL focus for every DOM-backed control.
+    Buttons and checkboxes can become the LCL focus target through Tab just
+    like edits; focusing their element also blurs the previously focused edit. }
+  if Control.CanFocus and (GetCurrentForm.FocusedControl = Control) and (LastDOMFocus <> Control) then
+  begin
+    LastDOMFocus := Control;
+    Element.InvokeJSNoResult('focus', []);
+  end;
   Initialized := True;
 end;
 
