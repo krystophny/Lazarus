@@ -193,4 +193,14 @@ object DemoForm: TDemoForm
     OnPaint = DrawingPaint
     OnMouseDown = DrawingMouseDown
   end
+  object FocusMemoPanel: TPanel
+    Left = 344
+    Top = 156
+    Width = 180
+    Height = 26
+    Caption = 'Double-click to edit text'
+    TabOrder = 15
+    TabStop = True
+    OnDblClick = FocusMemoPanelDblClick
+  end
 end

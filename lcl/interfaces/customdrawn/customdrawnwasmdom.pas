@@ -234,6 +234,7 @@ end;
 procedure TDOMControl.Sync;
 var
   Style: IJSObject;
+  ActiveElement: IJSObject;
   Position: TPoint;
   Value, NewStyle, Display, LabelText: String;
   Start, Finish, FontSize: Integer;
@@ -323,10 +324,22 @@ begin
   { Keep DOM focus in step with LCL focus for every DOM-backed control.
     Buttons and checkboxes can become the LCL focus target through Tab just
     like edits; focusing their element also blurs the previously focused edit. }
-  if Control.CanFocus and (GetCurrentForm.FocusedControl = Control) and (LastDOMFocus <> Control) then
+  if Control.CanFocus and (GetCurrentForm.FocusedControl = Control) then
   begin
-    LastDOMFocus := Control;
-    Element.InvokeJSNoResult('focus', []);
+    if LastDOMFocus <> Control then
+    begin
+      LastDOMFocus := Control;
+      Element.InvokeJSNoResult('focus', []);
+    end
+    else if CanvasElement <> nil then
+    begin
+      { Pointerdown focuses the canvas; restore an unchanged LCL focus only
+        when that is still the browser's active element. }
+      ActiveElement := Document.ReadJSPropertyObject('activeElement', TJSObject) as IJSObject;
+      if (ActiveElement <> nil)
+        and ActiveElement.InvokeJSBooleanResult('isSameNode', [CanvasElement]) then
+        Element.InvokeJSNoResult('focus', []);
+    end;
   end;
   Initialized := True;
 end;

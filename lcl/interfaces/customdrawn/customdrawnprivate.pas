@@ -268,6 +268,7 @@ end;
 procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 var
   lTarget: TWinControl;
+  lMouseTarget: TWinControl;
   lIntfTarget: TWinControl = nil;
   lEventPos: TPoint;
   lMsg: TLMessage;
@@ -289,6 +290,7 @@ begin
   GetCursorPos(MouseDownPos);}
 
   lTarget := FindControlWhichReceivedEvent(AWindowHandle.LCLForm, AWindowHandle.Children, x, y);
+  lMouseTarget := lTarget;
   //DebugLn(Format('CallbackMouseDown lEventPos X=%d y=%d lTarget %s:%s',
   //  [lEventPos.X, lEventPos.y, lTarget.Name, lTarget.ClassName]));
   AWindowHandle.LastMouseDownControl := lTarget;
@@ -309,7 +311,11 @@ begin
   if IsIntfControl(lTarget) then
   begin
     lIntfTarget := lTarget;
-    AWindowHandle.FocusedIntfControl := lTarget;
+    { An injected control's callback may explicitly move focus. Preserve it. }
+    if (AWindowHandle.FocusedControl = lMouseTarget)
+      and ((AWindowHandle.FocusedIntfControl = nil)
+        or (AWindowHandle.FocusedIntfControl = lIntfTarget)) then
+      AWindowHandle.FocusedIntfControl := lIntfTarget;
     lTarget := lTarget.Parent;
 
     if ClickCount > 1 then
@@ -324,9 +330,14 @@ begin
   lMsg.Msg := LM_LBUTTONDOWN;
   NotifyApplicationUserInput(lTarget, lMsg);
 
-  // If the target is focusable, a mouse down will give it focus
-  if not IsControlBar(lTarget) then
-    CDWidgetset.CDSetFocusToControl(lTarget, lIntfTarget);
+  { Mouse down normally gives the target focus. Keep any explicit focus change
+    made while dispatching its handlers. }
+  if (AWindowHandle.FocusedControl = lMouseTarget)
+    and (AWindowHandle.FocusedIntfControl = lIntfTarget) then
+  begin
+    if not IsControlBar(lTarget) then
+      CDWidgetset.CDSetFocusToControl(lTarget, lIntfTarget);
+  end;
 
   // Check if we are scrolling the form
   if lTarget = AWindowHandle.LCLForm then
