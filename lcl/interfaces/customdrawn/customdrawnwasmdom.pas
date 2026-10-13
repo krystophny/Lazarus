@@ -4,7 +4,7 @@ unit CustomDrawnWasmDOM;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, Types, Math, Controls, StdCtrls, ExtCtrls, Forms,
-  LCLType, WSStdCtrls, CustomDrawnWSStdCtrls, CustomDrawnProc, LazUTF8, Job.JS;
+  LCLType, TextStrings, WSStdCtrls, CustomDrawnWSStdCtrls, CustomDrawnProc, LazUTF8, Job.JS;
 type
   TBrowserWSEdit = class(TCDWSCustomEdit)
   published
@@ -18,11 +18,7 @@ type
   published
     class function CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle; override;
     class procedure DestroyHandle(const Control: TWinControl); override;
-    class function GetText(const Control: TWinControl; var Text: String): Boolean; override;
-    class procedure SetText(const Control: TWinControl; const Text: String); override;
     class function GetStrings(const Control: TCustomMemo): TStrings; override;
-    class procedure FreeStrings(var Strings: TStrings); override;
-    class procedure AppendText(const Control: TCustomMemo; const Text: String); override;
   end;
   TBrowserWSButton = class(TWSButton)
   published
@@ -59,7 +55,7 @@ type
     SyncedStyle, SyncedText, SyncedLabel: String;
     SyncedStart, SyncedFinish: Integer;
     SyncedEnabled, SyncedReadOnly, Initialized, Updating, Hidden,
-      IsComposing, MemoLinesInitialized: Boolean;
+      IsComposing: Boolean;
     SyncedMaxLength: Integer;
     procedure Activate;
     procedure Sync;
@@ -112,27 +108,6 @@ begin
   end;
   if LastRevealedForm = Control then
     LastRevealedForm := nil;
-end;
-
-function MemoValueForBrowser(const Value: string): string;
-var
-  L: Integer;
-begin
-  Result := Value;
-  L := Length(Result);
-  if (L >= 2) and (Copy(Result, L - 1, 2) = #13#10) then
-    SetLength(Result, L - 2)
-  else if (L >= 1) and (Result[L] in [#10, #13]) then
-    SetLength(Result, L - 1);
-end;
-
-procedure SetMemoLinesText(Memo: TCustomMemo; const Value: String);
-begin
-  Memo.Lines.Text := Value;
-  { TStringList.Text omits a trailing empty line when parsing a final line
-    break. Store that blank line explicitly so the memo model keeps it. }
-  if (Value <> '') and (Value[Length(Value)] in [#10, #13]) then
-    Memo.Lines.Add('');
 end;
 
 function FindEntry(Control: TWinControl): TDOMControl;
@@ -219,7 +194,7 @@ end;
 
 procedure TDOMControl.Activate;
 var
-  Value, Prefix, ModelValue: String;
+  Value, Prefix: String;
   Start, Finish: Integer;
   NotifyTextChanged: Boolean;
 begin
@@ -238,19 +213,13 @@ begin
     try
       SyncedText := Value;
       SyncedStart := Start; SyncedFinish := Finish;
-      if Control is TCustomMemo then
+      if TCustomEdit(Control).Text = Value then
+      else if Control is TCustomMemo then
       begin
-        if TCustomMemo(Control).Lines <> nil then
-          ModelValue := MemoValueForBrowser(TCustomMemo(Control).Lines.Text)
-        else
-          ModelValue := '';
-        if ModelValue <> Value then
-        begin
-          SetMemoLinesText(TCustomMemo(Control), Value);
-          NotifyTextChanged := True;
-        end;
+        TCustomMemo(Control).Lines.Text := Value;
+        NotifyTextChanged := True;
       end
-      else if TCustomEdit(Control).Text <> Value then
+      else
       begin
         { Set the widget value without sending CM_TEXTCHANGED yet. The message
           invokes OnChange, which may destroy both Control and this entry. }
@@ -367,20 +336,7 @@ begin
     Edit := TCustomEdit(Control);
     if not IsComposing then
     begin
-      if Control is TCustomMemo then
-      begin
-        if TCustomMemo(Control).Lines <> nil then
-        begin
-          if not MemoLinesInitialized then
-            Value := TCustomMemo(Control).Lines.Text
-          else
-            Value := MemoValueForBrowser(TCustomMemo(Control).Lines.Text);
-        end
-        else
-          Value := '';
-      end
-      else
-        Value := Edit.Text;
+      Value := Edit.Text;
       if not Initialized or (SyncedText <> Value) then Element.WriteJSPropertyUTF8String('value', Value);
       SyncedText := Value;
       Start := TCDWSCustomEdit.GetSelStart(Edit);
@@ -559,83 +515,15 @@ begin
 end;
 
 class procedure TBrowserWSMemo.DestroyHandle(const Control: TWinControl);
-var
-  CDWinControl: TCDWinControl;
 begin
-  { TCustomMemo has released FLines before destroying its widgetset handle.
-    GetStrings returned this same list, so detach the stale alias before the
-    custom-drawn edit is destroyed. }
-  if (Control is TCustomMemo) and (TCustomMemo(Control).Lines = nil) then
-  begin
-    CDWinControl := TCDWinControl(Control.Handle);
-    if (CDWinControl <> nil) and (CDWinControl.CDControl <> nil) then
-      TCDIntfEdit(CDWinControl.CDControl).DetachLines;
-  end;
   DestroyDOMControl(Control);
 end;
 
-class function TBrowserWSMemo.GetText(const Control: TWinControl;
-  var Text: String): Boolean;
-var
-  Entry: TDOMControl;
-  Memo: TCustomMemo;
-  ModelValue: String;
-begin
-  Entry := FindEntry(Control);
-  Result := Entry <> nil;
-  if not Result then Exit;
-  Memo := TCustomMemo(Control);
-  if Memo.Lines <> nil then ModelValue := MemoValueForBrowser(Memo.Lines.Text)
-  else ModelValue := '';
-  if Entry.IsComposing then
-    Text := Entry.SyncedText
-  else if not Entry.MemoLinesInitialized then
-  begin
-    if Memo.Lines <> nil then Text := Memo.Lines.Text
-    else Text := '';
-  end
-  else if ModelValue <> Entry.SyncedText then
-    Text := ModelValue
-  else
-  begin
-    { Lines.Text carries a TStrings structural terminator; after the model
-      has been synchronized, the textarea value is the exact widget text. }
-    Text := Entry.Element.ReadJSPropertyUTF8String('value');
-  end;
-end;
-
-class procedure TBrowserWSMemo.SetText(const Control: TWinControl;
-  const Text: String);
-var
-  Entry: TDOMControl;
-  Memo: TCustomMemo;
-begin
-  Memo := TCustomMemo(Control);
-  if Memo.Lines <> nil then SetMemoLinesText(Memo, Text);
-  Entry := FindEntry(Control);
-  if Entry = nil then Exit;
-  Entry.MemoLinesInitialized := Memo.Lines <> nil;
-  if not Entry.IsComposing then
-  begin
-    Entry.Element.WriteJSPropertyUTF8String('value', Text);
-    Entry.SyncedText := Text;
-  end;
-  Entry.Sync;
-end;
-
+{ TTextStrings keeps the exact text, including a final line break, and
+  TCustomMemo copies it unchanged when the handle is created or destroyed. }
 class function TBrowserWSMemo.GetStrings(const Control: TCustomMemo): TStrings;
 begin
-  Result := TCDIntfEdit(TCDWinControl(Control.Handle).CDControl).Lines;
-end;
-
-class procedure TBrowserWSMemo.FreeStrings(var Strings: TStrings);
-begin
-  Strings := nil;
-end;
-
-class procedure TBrowserWSMemo.AppendText(const Control: TCustomMemo; const Text: String);
-begin
-  TBrowserWSEdit.SetText(Control, Control.Text + Text);
+  Result := TTextStrings.Create;
 end;
 
 class function TBrowserWSButton.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;

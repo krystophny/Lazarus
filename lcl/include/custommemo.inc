@@ -97,14 +97,11 @@ end;
 procedure TCustomMemo.InitializeWnd;
 var
   NewStrings : TStrings;
-  TextValue: TCaption;
-  WidgetText: String;
 begin
   {$ifdef DEBUG_MEMO}
   DebugLn('[TCustomMemo.InitializeWnd] A ',FLines.ClassName);
   {$endif}
   // fetch/create the interface item list
-  TextValue := Lines.Text;
   NewStrings := TWSCustomMemoClass(WidgetSetClass).GetStrings(Self);
   // copy the items (text)
   NewStrings.Assign(Lines);
@@ -115,10 +112,6 @@ begin
   // new item list is the interface item list
   FLines:= NewStrings;
 
-  // Preserve text that a widgetset cannot represent with its line list alone.
-  if TWSCustomMemoClass(WidgetSetClass).GetText(Self, WidgetText) then
-    TWSCustomMemoClass(WidgetSetClass).SetText(Self, TextValue);
-
   inherited InitializeWnd;
   {$ifdef DEBUG_MEMO}
   DebugLn('[TCustomMemo.InitializeWnd] END ',DbgSName(Self),' ',FLines.ClassName,' FLines.Count=',dbgs(FLines.Count));
@@ -128,8 +121,6 @@ end;
 procedure TCustomMemo.FinalizeWnd;
 var
   NewStrings : TStrings;
-  TextValue: String;
-  I: Integer;
 begin
   if Assigned(FLines) then
   begin
@@ -141,12 +132,6 @@ begin
 
     // copy items (text+objects) from the interface items list
     NewStrings.Assign(Lines);
-    if TWSCustomMemoClass(WidgetSetClass).GetText(Self, TextValue) then
-    begin
-      NewStrings.Text := TextValue;
-      for I := 0 to NewStrings.Count - 1 do
-        if I < Lines.Count then NewStrings.Objects[I] := Lines.Objects[I];
-    end;
 
     // Delete the interface item list
     TWSCustomMemoClass(WidgetSetClass).FreeStrings(FLines);
@@ -164,35 +149,19 @@ end;
 
 function TCustomMemo.RealGetText: TCaption;
 begin
-  { Prefer the live widget value when the widgetset can provide it. Some
-    backends expose a real text buffer through Lines, while others (such as
-    the browser textarea) use a line list that adds a structural final line
-    break to Text. }
-  if HandleAllocated and not (csLoading in ComponentState) and
-    TWSCustomMemoClass(WidgetSetClass).GetText(Self, Result) then
-    Exit;
-  if FLines <> nil then Result := FLines.Text
-  else Result := '';
+  Result := Lines.Text;
   {$ifdef DEBUG_MEMO}
   debugln('TCustomMemo.RealGetText "',Result,'"');
   {$endif}
 end;
 
 procedure TCustomMemo.RealSetText(const AValue: TCaption);
-var
-  WidgetText: String;
 begin
   {$ifdef DEBUG_MEMO}
   debugln('TCustomMemo.RealSetText "',AValue,'"');
   {$endif}
   fTExtChangedByRealSetText:=True;
   Lines.Text := AValue;
-  if HandleAllocated and
-    TWSCustomMemoClass(WidgetSetClass).GetText(Self, WidgetText) then
-  begin
-    if WidgetText <> AValue then
-      TWSCustomMemoClass(WidgetSetClass).SetText(Self, AValue);
-  end;
   fTExtChangedByRealSetText:=False;
 end;
 
