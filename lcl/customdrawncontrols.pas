@@ -342,11 +342,11 @@ type
     FItems: TStrings;
     FKeyboardInputBehavior: TKeyboardInputBehavior;
     function GetItems: TStrings;
-    procedure ShowSelectItemDialogResult(ASelectedItem: Integer);
     procedure SetItemIndex(AValue: Integer);
     procedure SetItems(AValue: TStrings);
     procedure SetKeyboardInputBehavior(AValue: TKeyboardInputBehavior);
   protected
+    procedure ShowSelectItemDialogResult(ASelectedItem: Integer); virtual;
     function GetControlId: TCDControlID; override;
     // mouse
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -1307,7 +1307,8 @@ begin
     begin
       // Call the combobox dialog
       LCLIntf.OnShowSelectItemDialogResult := @ShowSelectItemDialogResult;
-      LCLIntf.ShowSelectItemDialog(FItems, Self.ClientToScreen(Point(Left, Top+Height)));
+      LCLIntf.ShowSelectItemDialog(FItems,
+        Self.ClientToScreen(Point(Left, Top+Height)), ItemIndex);
 
       Exit;
     end;
@@ -1934,7 +1935,12 @@ end;
 
 procedure TCDEdit.DoEnter;
 begin
+  {$ifdef CPUWASM32}
+  // Keep idle browser windows free of caret-timer repaints.
+  FCaretTimer.Enabled := False;
+  {$else}
   FCaretTimer.Enabled := True;
+  {$endif}
   FEditState.CaretIsVisible := True;
   inherited DoEnter;
 end;

@@ -106,6 +106,7 @@ implementation
 uses
  CheckLst,
  CustomDrawnWSButtons,
+ {$ifdef CPUWASM32}CustomDrawnWSDialogs, CustomDrawnWasmDOM,{$endif}
 { WinCEWSCalendar,}
  customdrawnwschecklst,
  CustomDrawnWSComCtrls,
@@ -233,7 +234,12 @@ end;
 // dialogs
 function RegisterCommonDialog: Boolean; alias : 'WSRegisterCommonDialog';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TCommonDialog, TCDWSCommonDialog);
+  Result := True;
+  {$else}
   Result := False;
+  {$endif}
 end;
 
 function RegisterFileDialog: Boolean; alias : 'WSRegisterFileDialog';
@@ -305,13 +311,15 @@ end;
 
 function RegisterCustomEdit: Boolean; alias : 'WSRegisterCustomEdit';
 begin
-  RegisterWSComponent(TCustomEdit, TCDWSCustomEdit);
+  {$ifdef CPUWASM32}RegisterWSComponent(TCustomEdit, TBrowserWSEdit);
+  {$else}RegisterWSComponent(TCustomEdit, TCDWSCustomEdit);{$endif}
   Result := True;
 end;
 
 function RegisterCustomMemo: Boolean; alias : 'WSRegisterCustomMemo';
 begin
-  RegisterWSComponent(TCustomMemo, TCDWSCustomMemo);
+  {$ifdef CPUWASM32}RegisterWSComponent(TCustomMemo, TBrowserWSMemo);
+  {$else}RegisterWSComponent(TCustomMemo, TCDWSCustomMemo);{$endif}
   Result := True;
 end;
 
@@ -322,13 +330,21 @@ end;
 
 function RegisterCustomButton: Boolean; alias : 'WSRegisterCustomButton';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TCustomButton, TBrowserWSButton);
+  {$else}
   RegisterWSComponent(TCustomButton, TCDWSButton);
+  {$endif}
   Result := True;
 end;
 
 function RegisterCustomCheckBox: Boolean; alias : 'WSRegisterCustomCheckBox';
 begin
+  {$ifdef CPUWASM32}
+  RegisterWSComponent(TCustomCheckBox, TBrowserWSCheckBox);
+  {$else}
   RegisterWSComponent(TCustomCheckBox, TCDWSCustomCheckBox);
+  {$endif}
   Result := True;
 end;
 

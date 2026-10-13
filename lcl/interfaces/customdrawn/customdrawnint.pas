@@ -51,7 +51,8 @@ uses
   lazcanvas, lazregions, lazdeviceapis,
   LCLPlatformDef, InterfaceBase, Themes, Dialogs, Buttons,
   Controls, StdCtrls, ComCtrls, Forms, lclproc, IntfGraphics, GraphType,
-  LCLType, LMessages, Graphics, LCLStrConsts, Menus, LazLoggerBase;
+  LCLType, LMessages, Graphics, LCLStrConsts, Menus, LazLoggerBase
+  {$ifdef CD_Wasm}, FPJSON{$endif};
 
 type
   {$ifdef CD_Windows}
@@ -98,6 +99,7 @@ type
 
   TLazCDCustomFont = class(TFPCustomFont)
   public
+    {$ifdef CD_Wasm}Angle: Integer;{$endif}
     {$ifndef CD_UseNativeText}
     FTFont: TFreeTypeFont;
     {$endif}
@@ -580,10 +582,20 @@ var
   eventResult: jint;
 {$endif}
 
+{$ifdef CD_Wasm}
+procedure LCLWasmRender; cdecl;
+procedure LCLWasmPointer(Kind, X, Y, Button, Modifiers: LongInt); cdecl;
+procedure LCLWasmResize(Width, Height: LongInt); cdecl;
+procedure LCLWasmTimer(Handle: LongInt); cdecl;
+procedure LCLWasmIdle;
+procedure CDForgetBrowserFocusReveal(Control: TWinControl);
+{$endif}
+
 implementation
 
 uses
   WsControls, lclintf,
+  {$ifdef CD_Wasm}CustomDrawnWasmDOM,{$endif}
   CustomDrawnWSFactory,
   CustomDrawnWSForms,
 {  Win32WSButtons,
@@ -595,6 +607,13 @@ uses
   Win32Extra,}
   customdrawnprivate,
   LCLMessageGlue;
+
+{$ifdef CD_Wasm}
+procedure CDForgetBrowserFocusReveal(Control: TWinControl);
+begin
+  ForgetBrowserFocusReveal(Control);
+end;
+{$endif}
 
   {$ifdef CD_Windows}
 const
@@ -630,9 +649,17 @@ begin
   inherited Destroy;
 end;
 
+{$ifdef CD_Wasm}
+  {$I customdrawnobject_wasm.inc}
+{$endif}
+
 {$I customdrawnobject.inc}
 
 {$I customdrawnwinapi.inc}
+{$ifdef CD_Wasm}
+  {$I customdrawnwinapi_wasm.inc}
+  {$I customdrawnlclintf_wasm.inc}
+{$endif}
 {$I customdrawnlclintf.inc}
 
 {$ifdef CD_Windows}
@@ -660,6 +687,22 @@ end;
   {$I customdrawnobject_wayland.inc}
   {$I customdrawnwinapi_wayland.inc}
   {$I customdrawnlclintf_wayland.inc}
+{$endif}
+
+{$ifdef CD_Wasm}
+exports
+  LCLWasmRender name 'lcl_render',
+  LCLWasmPointer name 'lcl_pointer',
+  LCLWasmLeave name 'lcl_leave',
+  LCLWasmResize name 'lcl_resize',
+  LCLWasmKey name 'lcl_key',
+  LCLWasmWheel name 'lcl_wheel',
+  LCLWasmTimer name 'lcl_timer',
+  LCLWasmControl name 'lcl_control',
+  LCLWasmComposition name 'lcl_composition',
+  LCLWasmFocus name 'lcl_focus',
+  LCLWasmMenu name 'lcl_menu',
+  LCLWasmIdle name 'lcl_idle';
 {$endif}
 
 end.

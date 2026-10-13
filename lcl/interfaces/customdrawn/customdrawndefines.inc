@@ -1,3 +1,9 @@
+{$ifdef CPUWASM32}
+  {$define CD_Wasm}
+  {$define CD_UseNativeText}
+  {$define CD_HasNativeSelectItemDialog}
+{$endif}
+
 
 {$ifdef Darwin}
 {$modeswitch objectivec1}{$H+}// modeswitch seams to deactivate H+
@@ -12,7 +18,7 @@
 
 
 // Check if a backend which can be utilized in multiple-systems is already defined
-{$if defined(CD_X11) or defined(CD_Android) or defined(CD_Wayland)}
+{$if defined(CD_X11) or defined(CD_Android) or defined(CD_Wayland) or defined(CD_Wasm)}
 {$else}
   // Choosing the default backend
   {$ifdef Windows}

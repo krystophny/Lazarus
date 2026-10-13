@@ -30,6 +30,10 @@ function AskUser(const DialogCaption, DialogMessage: string; DialogType:
    LongInt; Buttons: TDialogButtons; HelpCtx: Longint): LongInt; override;
 
 function CreateEmptyRegion: hRGN; override;
+{$ifdef CD_Wasm}
+function CreateStandardCursor(ACursor: SmallInt): HCURSOR; override;
+procedure UpdateBrowserCursor(AControl: TWinControl = nil);
+{$endif}
 (*function CreateStandardCursor(ACursor: SmallInt): HCURSOR; override;
 function CreateRubberBand(const ARect: TRect; const ABrush: HBrush = 0): HWND; override;
 procedure DrawDefaultDockImage(AOldRect, ANewRect: TRect; AOperation: TDockImageOperation); override;
@@ -76,7 +80,7 @@ procedure RemoveProcessEventHandler(var AHandler: PProcessEventHandler); overrid
 
 procedure SetEventHandlerFlags(AHandler: PEventHandler; NewFlags: dword); override;
 procedure SetRubberBandRect(const ARubberBand: HWND; const ARect: TRect); override;*)
-function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean; override;
+function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer = -1): Boolean; override;
 {$ifndef CD_HasNativeSelectItemDialog}
 procedure HandleSelectItemDialogClose(ASender: TObject);
 {$endif}

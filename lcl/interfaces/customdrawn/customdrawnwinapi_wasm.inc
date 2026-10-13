@@ -1,0 +1,316 @@
+{%MainUnit customdrawnint.pas}
+
+{ Browser platform backend for the LCL CustomDrawn interface.
+  See COPYING.modifiedLGPL.txt for license and linking exception. }
+
+
+function BrowserFontSize(DC: HDC): Integer;
+var
+  Canvas: TLazCanvas;
+  Style, Angle: Integer;
+  Name: String;
+begin
+  if DC = 0 then DC := HDC(CDWidgetSet.ScreenDC);
+  Canvas := TLazCanvas(DC);
+  Result := Abs(Canvas.Font.Size);
+  if Result = 0 then Result := 13;
+  Name := Canvas.Font.Name;
+  Style := Ord(Canvas.Font.Bold) or (Ord(Canvas.Font.Italic) shl 1)
+    or (Ord(Canvas.Font.Underline) shl 2) or (Ord(Canvas.Font.StrikeThrough) shl 3);
+  Angle := 0;
+  if Canvas.AssignedFont is TLazCDCustomFont then Angle := TLazCDCustomFont(Canvas.AssignedFont).Angle;
+  BrowserFont(PChar(Name), Length(Name), Result, Style, Angle);
+end;
+
+function BrowserControl(Handle: HWND): TWinControl;
+begin
+  Result := nil;
+  if Handle <> 0 then Result := TCDBaseControl(Handle).GetWinControl;
+end;
+
+function TCDWidgetSet.ClientToScreen(Handle: HWND; var P: TPoint) : Boolean;
+var
+  Control: TWinControl;
+begin
+  Control := BrowserControl(Handle);
+  Result := Control <> nil;
+  if Result and not (Control is TCustomForm) then
+    P := P + FindControlPositionRelativeToTheForm(Control);
+end;
+
+function TCDWidgetSet.ClipboardGetData(ClipboardType: TClipboardType;
+  FormatID: TClipboardFormat; Stream: TStream): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if (Stream = nil) or not Assigned(BrowserClipboardRequest[ClipboardType]) then Exit;
+  for I := 0 to High(BrowserClipboardFormats[ClipboardType]) do
+    if BrowserClipboardFormats[ClipboardType][I] = FormatID then
+    begin
+      BrowserClipboardRequest[ClipboardType](FormatID, Stream);
+      Exit(True);
+    end;
+end;
+
+function TCDWidgetSet.ClipboardGetOwnerShip(ClipboardType: TClipboardType;
+  OnRequestProc: TClipboardRequestEvent; FormatCount: Integer;
+  Formats: PClipboardFormat): Boolean;
+var
+  I: Integer;
+begin
+  BrowserClipboardRequest[ClipboardType] := OnRequestProc;
+  SetLength(BrowserClipboardFormats[ClipboardType], FormatCount);
+  for I := 0 to FormatCount-1 do BrowserClipboardFormats[ClipboardType][I] := Formats[I];
+  Result := True;
+end;
+
+
+function TCDWidgetSet.DestroyCursor(Handle: HCURSOR): Boolean;
+begin
+  { Standard cursor handles have no allocated native resources. }
+  Result := (Handle >= 1) and (Handle <= 1 - crLow);
+end;
+
+function ApplyBrowserCursor(ACursor: HCURSOR): HCURSOR;
+begin
+  Result := BrowserCursorHandle;
+  if ACursor = BrowserCursorHandle then Exit;
+  BrowserCursorHandle := ACursor;
+  if (ACursor >= 1) and (ACursor <= 1 - crLow) then
+    BrowserCursor(1 - LongInt(ACursor))
+  else
+    BrowserCursor(crDefault);
+end;
+
+function TCDWidgetSet.SetCursor(ACursor: HCURSOR): HCURSOR;
+begin
+  Result := BrowserCursorHandle;
+  if (ACursor = 1) and (Screen <> nil) and (Screen.RealCursor = crDefault) then
+    { Restoring the screen cursor must restore the hovered control's cursor. }
+    UpdateBrowserCursor
+  else
+    ApplyBrowserCursor(ACursor);
+end;
+
+function TCDWidgetSet.EnumFontFamiliesEx(DC: HDC; lpLogFont: PLogFont; Callback: FontEnumExProc; Lparam: LParam; Flags: dword): longint;
+begin
+  Result := 0; { Font enumeration is outside this initial backend slice. }
+end;
+
+function TCDWidgetSet.ExtTextOut(DC: HDC; X, Y: Integer; Options: Longint;
+  Rect: PRect; Str: PChar; Count: Longint; Dx: PInteger): Boolean;
+var
+  Canvas: TLazCanvas;
+  Raw: TRawImage;
+  Clip: TRect;
+  Color: LongInt;
+begin
+  Result := IsValidDC(DC);
+  if not Result then Exit;
+  Canvas := TLazCanvas(DC);
+  TLazIntfImage(Canvas.Image).GetRawImage(Raw);
+  Clip := Bounds(0, 0, Canvas.Width, Canvas.Height);
+  if Canvas.Clipping then Clip := Canvas.ClipRect;
+  if ((Options and ETO_CLIPPED) <> 0) and (Rect <> nil) then
+    IntersectRect(Clip, Clip, Rect^);
+  Color := (Canvas.Font.FPColor.Red shr 8) shl 16
+    or (Canvas.Font.FPColor.Green shr 8) shl 8 or (Canvas.Font.FPColor.Blue shr 8);
+  BrowserText(Raw.Data, Canvas.Width, Canvas.Height,
+    X + Canvas.WindowOrg.X + Canvas.BaseWindowOrg.X,
+    Y + Canvas.WindowOrg.Y + Canvas.BaseWindowOrg.Y,
+    Str, Count, BrowserFontSize(DC), Color,
+    Clip.Left, Clip.Top, Clip.Right, Clip.Bottom);
+end;
+
+function TCDWidgetSet.BackendGetClientBounds(handle : HWND; var ARect : TRect) : Boolean;
+var
+  Control: TWinControl;
+begin
+  Control := BrowserControl(Handle);
+  Result := Control <> nil;
+  if Result then ARect := Bounds(0, 0, Control.Width, Control.Height);
+end;
+
+function TCDWidgetSet.GetCursorPos(var lpPoint: TPoint ): Boolean;
+begin
+  lpPoint := BrowserMouse;
+  Result := True;
+end;
+
+
+function TCDWidgetSet.GetDeviceCaps(DC: HDC; Index: Integer): Integer;
+begin
+  case Index of
+    LOGPIXELSX, LOGPIXELSY: Result := 96;
+    BITSPIXEL: Result := 32;
+    PLANES: Result := 1;
+    HORZRES: Result := BrowserWidth;
+    VERTRES: Result := BrowserHeight;
+    else Result := 0;
+  end;
+end;
+
+function TCDWidgetSet.GetKeyState(nVirtKey: Integer): Smallint;
+begin
+  Result := 0;
+  case nVirtKey of
+    $10: if (BrowserMods and 1) <> 0 then Result := Smallint($8000);  { VK_SHIFT }
+    $11: if (BrowserMods and 2) <> 0 then Result := Smallint($8000);  { VK_CONTROL }
+    $12: if (BrowserMods and 4) <> 0 then Result := Smallint($8000);  { VK_MENU }
+    $01: if (BrowserMods and 8) <> 0 then Result := Smallint($8000);  { VK_LBUTTON }
+  end;
+end;
+
+function TCDWidgetSet.GetSystemMetrics(nIndex: Integer): Integer;
+begin
+  case nIndex of
+    SM_CXSCREEN, SM_CXVIRTUALSCREEN: Result := BrowserWidth;
+    SM_CYSCREEN, SM_CYVIRTUALSCREEN: Result := BrowserHeight;
+    SM_CMONITORS: Result := 1;
+    SM_CMOUSEBUTTONS: Result := 3;
+    SM_CXVSCROLL, SM_CYHSCROLL: Result := 16;
+    SM_CXDOUBLECLK, SM_CYDOUBLECLK, SM_CXDRAG, SM_CYDRAG: Result := 4;
+    else Result := 0;
+  end;
+end;
+
+function TCDWidgetSet.GetTextExtentExPoint(DC: HDC; Str: PChar; Count,
+  MaxWidth: Integer; MaxCount, PartialWidths: PInteger; var Size: Types.TSize
+  ): Boolean;
+var
+  I, Width, FontSize: Integer;
+  Complete: Boolean;
+begin
+  Result := GetTextExtentPoint(DC, Str, Count, Size);
+  FontSize := BrowserFontSize(DC);
+  if MaxCount <> nil then MaxCount^ := 0;
+  Width := 0;
+  for I := 1 to Count do
+  begin
+    { Measure complete UTF-8 sequences only; a byte inside a character keeps
+      the width before that character. }
+    Complete := (I = Count) or (Byte(Str[I]) and $C0 <> $80);
+    if Complete then Width := BrowserMeasure(Str, I, FontSize);
+    if PartialWidths <> nil then PartialWidths[I-1] := Width;
+    if not Complete then Continue;
+    if Width > MaxWidth then
+    begin
+      if PartialWidths = nil then Break;
+    end
+    else if MaxCount <> nil then MaxCount^ := I;
+  end;
+end;
+
+function TCDWidgetSet.GetTextExtentPoint(DC: HDC; Str: PChar; Count: Integer;
+  var Size: Types.TSize): Boolean;
+var
+  FontSize: Integer;
+begin
+  FontSize := BrowserFontSize(DC);
+  Size.cx := BrowserMeasure(Str, Count, FontSize);
+  Size.cy := Ceil(FontSize * 1.25);
+  Result := True;
+end;
+
+function TCDWidgetSet.GetTextMetrics(DC: HDC; var TM: TTextMetric): Boolean;
+var
+  FontSize: Integer;
+begin
+  FontSize := BrowserFontSize(DC);
+  FillChar(TM, SizeOf(TM), 0);
+  TM.tmHeight := Ceil(FontSize * 1.25);
+  TM.tmAscent := FontSize;
+  TM.tmDescent := TM.tmHeight - TM.tmAscent;
+  TM.tmAveCharWidth := BrowserMeasure('n', 1, FontSize);
+  TM.tmMaxCharWidth := BrowserMeasure('W', 1, FontSize);
+  TM.tmWeight := 400;
+  TM.tmDigitizedAspectX := 96;
+  TM.tmDigitizedAspectY := 96;
+  Result := True;
+end;
+
+function TCDWidgetSet.BackendGetWindowRelativePosition(Handle: HWND; var Left, Top: integer): boolean;
+var
+  Control: TWinControl;
+begin
+  Control := BrowserControl(Handle);
+  Result := Control <> nil;
+  if Result then
+  begin
+    Left := Control.Left;
+    Top := Control.Top;
+  end;
+end;
+
+function TCDWidgetSet.BackendGetWindowSize(Handle: hwnd; var Width, Height: integer): boolean;
+var
+  Control: TWinControl;
+begin
+  Control := BrowserControl(Handle);
+  Result := Control <> nil;
+  if Result then
+  begin
+    Width := Control.Width;
+    Height := Control.Height;
+  end;
+end;
+
+function TCDWidgetSet.BackendInvalidateRect(aHandle: HWND; Rect: pRect; bErase: Boolean): Boolean;
+var
+  Control: TWinControl;
+  Position: TPoint;
+  Damage, Clipped: TRect;
+  I: Integer;
+begin
+  Result := True;
+  BrowserDirty := True;
+  Control := BrowserControl(aHandle);
+  if (Control = nil) or (Control is TCustomForm) then
+    BrowserFullDamage := True
+  else if not BrowserFullDamage then
+  begin
+    Position := FindControlPositionRelativeToTheForm(Control, True);
+    if Rect = nil then Damage := Bounds(0, 0, Control.Width, Control.Height)
+    else Damage := Rect^;
+    OffsetRect(Damage, Position.X, Position.Y);
+    if IntersectRect(Clipped, Damage, Bounds(0, 0, BrowserWidth, BrowserHeight)) then
+    begin
+      for I := 0 to BrowserDamageCount - 1 do
+        if EqualRect(BrowserDamage[I], Clipped) then Exit;
+      if BrowserDamageCount = Length(BrowserDamage) then BrowserFullDamage := True
+      else
+      begin
+        BrowserDamage[BrowserDamageCount] := Clipped;
+        Inc(BrowserDamageCount);
+      end;
+    end;
+  end;
+  BrowserInvalidate;
+end;
+
+
+function TCDWidgetSet.MessageBox(hWnd: HWND; lpText, lpCaption: PChar; uType: Cardinal): integer;
+var
+  Text, Caption: string;
+begin
+  Text := '';
+  if lpText <> nil then Text := lpText;
+  Caption := '';
+  if lpCaption <> nil then Caption := lpCaption;
+  Result := BrowserMessage(PChar(Text), PChar(Caption), Length(Text), Length(Caption),
+    Integer(uType));
+end;
+
+
+function TCDWidgetSet.ScreenToClient(Handle : HWND; var P : TPoint) : Integer;
+begin
+  P.X := -P.X; P.Y := -P.Y;
+  Result := Ord(ClientToScreen(Handle, P));
+  P.X := -P.X; P.Y := -P.Y;
+end;
+
+function TCDWidgetSet.BackendSetFocus(hWnd: HWND): HWND;
+begin
+  Result := hWnd; { LCL owns internal focus; the host owns canvas focus. }
+end;

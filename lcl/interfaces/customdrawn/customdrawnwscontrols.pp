@@ -78,6 +78,9 @@ type
                                       const AOldPos, ANewPos: Integer;
                                       const AChildren: TFPList); override;
     class procedure SetColor(const AWinControl: TWinControl); override;
+    {$ifdef CD_Wasm}
+    class procedure SetCursor(const AWinControl: TWinControl; const ACursor: HCURSOR); override;
+    {$endif}
     class procedure SetFont(const AWinControl: TWinControl; const AFont: TFont); override;
     class procedure SetText(const AWinControl: TWinControl; const AText: string); override;
 
@@ -86,6 +89,7 @@ type
           const AParams: TCreateParams): HWND; override;
     class procedure DestroyHandle(const AWinControl: TWinControl); override;
     class procedure Invalidate(const AWinControl: TWinControl); override;
+    class procedure ScrollBy(const AWinControl: TWinControl; DeltaX, DeltaY: Integer); override;
     class procedure ShowHide(const AWinControl: TWinControl); override;
 
 {    class function  CanFocus(const AWinControl: TWinControl): Boolean; override;
@@ -150,6 +154,16 @@ uses
   customdrawn_cocoaproc,
   {$endif}
   customdrawnwsforms;
+
+{$ifdef CD_Wasm}
+class procedure TCDWSWinControl.SetCursor(const AWinControl: TWinControl;
+  const ACursor: HCURSOR);
+begin
+  if not AWinControl.HandleAllocated then Exit;
+  TCDBaseControl(AWinControl.Handle).Props['BrowserCursor'] := Pointer(ACursor);
+  CDWidgetSet.UpdateBrowserCursor;
+end;
+{$endif}
 
 { TCDWSLazAccessibleObject }
 
@@ -310,7 +324,7 @@ begin
     parent-relative; using them directly puts the region in the wrong
     space and breaks hit-testing for any control whose parent is not
     the form. }
-  lFormPos := FindControlPositionRelativeToTheForm(AWinControl);
+  lFormPos := FindControlPositionRelativeToTheForm(AWinControl, True);
   lCDWinControl.Region.SetAsSimpleRectRegion(Bounds(lFormPos.X, lFormPos.Y, AWidth, AHeight));
   Invalidate(AWinControl);
 end;
@@ -341,7 +355,7 @@ begin
   lCDWinControl.WinControl := AWinControl;
   lCDWinControl.Region := TLazRegionWithChilds.Create;
   lCDWinControl.Region.UserData := AWinControl;
-  lControlPosInForm := FindControlPositionRelativeToTheForm(AWinControl);
+  lControlPosInForm := FindControlPositionRelativeToTheForm(AWinControl, True);
   lCDWinControl.Region.SetAsSimpleRectRegion(Bounds(lControlPosInForm.X, lControlPosInForm.Y, AParams.Width, AParams.Height));
 
   Result := HWND(lCDWinControl);
@@ -363,12 +377,54 @@ end;
 
 class procedure TCDWSWinControl.DestroyHandle(const AWinControl: TWinControl);
 begin
+  {$ifdef CD_Wasm}
+  TCDWinControl(AWinControl.Handle).CDControl.Free;
+  TCDWinControl(AWinControl.Handle).Free;
+  {$endif}
 end;
 
 class procedure TCDWSWinControl.Invalidate(const AWinControl: TWinControl);
 begin
   // lpRect = nil updates entire client area of window
   CDWidgetset.InvalidateRect(AWinControl.Handle, nil, true);
+end;
+
+class procedure TCDWSWinControl.ScrollBy(const AWinControl: TWinControl;
+  DeltaX, DeltaY: Integer);
+var
+  Base: TCDBaseControl;
+  procedure UpdateChildRegions(AParent: TWinControl);
+  var
+    I: Integer;
+    Child: TWinControl;
+    Position: TPoint;
+    ChildHandle: TCDWinControl;
+  begin
+    for I := 0 to AParent.ControlCount - 1 do
+      if AParent.Controls[I] is TWinControl then
+      begin
+        Child := TWinControl(AParent.Controls[I]);
+        if Child.HandleAllocated then
+        begin
+          ChildHandle := TCDWinControl(Child.Handle);
+          Position := FindControlPositionRelativeToTheForm(Child, True);
+          ChildHandle.Region.SetAsSimpleRectRegion(Bounds(Position.X, Position.Y, Child.Width, Child.Height));
+        end;
+        UpdateChildRegions(Child);
+      end;
+  end;
+begin
+  if not (AWinControl is TScrollBox) then
+  begin
+    inherited ScrollBy(AWinControl, DeltaX, DeltaY);
+    Exit;
+  end;
+  if not AWinControl.HandleAllocated then Exit;
+  Base := TCDBaseControl(AWinControl.Handle);
+  Base.ScrollX := Base.ScrollX - DeltaX;
+  Base.ScrollY := Base.ScrollY - DeltaY;
+  UpdateChildRegions(AWinControl);
+  AWinControl.Invalidate;
 end;
 
 { Maintain region-tree consistency on visibility change. The region

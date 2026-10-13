@@ -70,6 +70,9 @@ function CreateRectRgn(X1, Y1, X2, Y2: Integer): HRGN; override;
 procedure DeleteCriticalSection(var CritSection: TCriticalSection); override;
 function DeleteDC(hDC: HDC): Boolean; override;
 function DeleteObject(GDIObject: HGDIOBJ): Boolean; override;
+{$ifdef CD_Wasm}
+function DestroyCursor(Handle: HCURSOR): Boolean; override;
+{$endif}
 (*function DestroyCaret(Handle : HWND): Boolean; override;
 function DestroyIcon(Handle: HICON): Boolean; override;
 function DPtoLP(DC: HDC; var Points; Count: Integer): BOOL; override;
@@ -127,6 +130,7 @@ function GetRgnBox(RGN : HRGN; lpRect : PRect) : Longint; override;
 (*function GetROP2(DC: HDC): Integer; override;
 function GetScrollBarSize(Handle: HWND; BarKind: Integer): integer; override;
 function GetScrollbarVisible(Handle: HWND; SBStyle: Integer): boolean; override;*)
+function GetScrollbarVisible(Handle: HWND; SBStyle: Integer): Boolean; override;
 function GetScrollInfo(Handle: HWND; BarFlag: Integer; Var ScrollInfo: TScrollInfo): Boolean; override;
 function GetStockObject(Value: Integer): TLCLHandle; override;
 function GetSysColor(nIndex: Integer): DWORD; override;
@@ -201,6 +205,9 @@ function SetCaretPosEx(Handle: HWnd; X, Y: Integer): Boolean; override;
 function SetCaretRespondToFocus(handle: HWND; ShowHideOnFocus: boolean): Boolean; override;
 function SetCursor(ACursor: HCURSOR): HCURSOR; override;
 function SetCursorPos(X, Y: Integer): Boolean; override;*)
+{$ifdef CD_Wasm}
+function SetCursor(ACursor: HCURSOR): HCURSOR; override;
+{$endif}
 function SetFocus(hWnd: HWND): HWND; override;
 function BackendSetFocus(hWnd: HWND): HWND;
 (*function SetForegroundWindow(HWnd: HWND): boolean; override;
