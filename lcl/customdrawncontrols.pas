@@ -342,16 +342,11 @@ type
     FItems: TStrings;
     FKeyboardInputBehavior: TKeyboardInputBehavior;
     function GetItems: TStrings;
-    {$ifndef CPUWASM32}
-    procedure ShowSelectItemDialogResult(ASelectedItem: Integer);
-    {$endif}
     procedure SetItemIndex(AValue: Integer);
     procedure SetItems(AValue: TStrings);
     procedure SetKeyboardInputBehavior(AValue: TKeyboardInputBehavior);
   protected
-    {$ifdef CPUWASM32}
     procedure ShowSelectItemDialogResult(ASelectedItem: Integer); virtual;
-    {$endif}
     function GetControlId: TCDControlID; override;
     // mouse
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -1940,12 +1935,12 @@ end;
 
 procedure TCDEdit.DoEnter;
 begin
-  {$IF DEFINED(WASM32) OR DEFINED(WASI)}
+  {$ifdef CPUWASM32}
   // Keep idle browser windows free of caret-timer repaints.
   FCaretTimer.Enabled := False;
-  {$ELSE}
+  {$else}
   FCaretTimer.Enabled := True;
-  {$ENDIF}
+  {$endif}
   FEditState.CaretIsVisible := True;
   inherited DoEnter;
 end;

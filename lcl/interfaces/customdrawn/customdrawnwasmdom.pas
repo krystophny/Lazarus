@@ -27,7 +27,6 @@ type
     class procedure SetBounds(const Control: TWinControl; const X, Y, Width, Height: Integer); override;
     class procedure ShowHide(const Control: TWinControl); override;
     class procedure SetText(const Control: TWinControl; const Text: String); override;
-    class function GetText(const Control: TWinControl; var Text: String): Boolean; override;
   end;
   TBrowserWSCheckBox = class(TWSCustomCheckBox)
   published
@@ -36,7 +35,6 @@ type
     class procedure SetBounds(const Control: TWinControl; const X, Y, Width, Height: Integer); override;
     class procedure ShowHide(const Control: TWinControl); override;
     class procedure SetText(const Control: TWinControl; const Text: String); override;
-    class function GetText(const Control: TWinControl; var Text: String): Boolean; override;
     class function RetrieveState(const Control: TCustomCheckBox): TCheckBoxState; override;
     class procedure SetState(const Control: TCustomCheckBox; const State: TCheckBoxState); override;
   end;
@@ -46,7 +44,7 @@ procedure DispatchBrowserDOMComposition(Handle: PtrUInt; Started: Boolean);
 procedure FocusBrowserDOMControl(Handle: PtrUInt);
 procedure ForgetBrowserFocusReveal(Control: TWinControl);
 implementation
-uses CustomDrawnWSControls, CustomDrawnPrivate, LCLMessageGlue, LCLIntf,
+uses CustomDrawnWSControls, CustomDrawnPrivate, LCLMessageGlue, LCLIntf, LCLProc,
   LMessages, CustomDrawnInt;
 type
   TDOMControl = class
@@ -118,6 +116,25 @@ begin
   if Entries = nil then Exit;
   for I := 0 to Entries.Count-1 do
     if TDOMControl(Entries[I]).Control = Control then Exit(TDOMControl(Entries[I]));
+end;
+
+procedure SyncControl(Control: TWinControl);
+var
+  Entry: TDOMControl;
+begin
+  Entry := FindEntry(Control);
+  if Entry <> nil then Entry.Sync;
+end;
+
+function SetDOMCaption(Control: TWinControl; const Text: String): Boolean;
+var
+  Entry: TDOMControl;
+begin
+  Entry := FindEntry(Control);
+  Result := Entry <> nil;
+  if not Result then Exit;
+  Entry.SyncedText := Text;
+  Entry.CaptionElement.WriteJSPropertyUTF8String('textContent', RemoveAmpersands(Text));
 end;
 
 procedure FocusCanvasForPaintedControl;
@@ -249,7 +266,7 @@ var
   Position, ParentPosition: TPoint;
   ControlRect, ClipRect, ParentRect, Intersection: TRect;
   ParentControl: TWinControl;
-  Value, NewStyle, Display, LabelText, ClipPath: String;
+  Value, NewStyle, LabelText, ClipPath: String;
   Start, Finish, FontSize, ClipTop, ClipRight, ClipBottom, ClipLeft: Integer;
   HasScrollClip, IsClippedOut: Boolean;
   Edit: TCustomEdit;
@@ -316,9 +333,8 @@ begin
     end;
   end;
   FontSize := Max(13, Abs(Control.Font.Height));
-  Display := '';
-  NewStyle := Format('%d,%d,%d,%d,%d,%s,%s',
-    [Position.X, Position.Y, Control.Width, Control.Height, FontSize, Display, ClipPath]);
+  NewStyle := Format('%d,%d,%d,%d,%d,%s',
+    [Position.X, Position.Y, Control.Width, Control.Height, FontSize, ClipPath]);
   if not Initialized or (NewStyle <> SyncedStyle) then
   begin
     Style := Root.ReadJSPropertyObject('style', TJSObject) as IJSObject;
@@ -327,7 +343,7 @@ begin
     Style.WriteJSPropertyUTF8String('width', IntToStr(Control.Width)+'px');
     Style.WriteJSPropertyUTF8String('height', IntToStr(Control.Height)+'px');
     Style.WriteJSPropertyUTF8String('fontSize', IntToStr(FontSize)+'px');
-    Style.WriteJSPropertyUTF8String('display', Display);
+    Style.WriteJSPropertyUTF8String('display', '');
     Style.WriteJSPropertyUTF8String('clipPath', ClipPath);
     SyncedStyle := NewStyle;
   end;
@@ -359,7 +375,7 @@ begin
   else if not Initialized or (SyncedText <> Control.Caption) then
   begin
     SyncedText := Control.Caption;
-    CaptionElement.WriteJSPropertyUTF8String('textContent', SyncedText);
+    CaptionElement.WriteJSPropertyUTF8String('textContent', RemoveAmpersands(SyncedText));
   end;
   if not Initialized or (SyncedEnabled <> Control.Enabled) then Element.WriteJSPropertyBoolean('disabled', not Control.Enabled);
   SyncedEnabled := Control.Enabled;
@@ -491,22 +507,19 @@ end;
 class procedure TBrowserWSEdit.SetText(const Control: TWinControl; const Text: String);
 begin
   inherited SetText(Control, Text);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class procedure TBrowserWSEdit.SetSelStart(const Control: TCustomEdit; NewStart: Integer);
 begin
   inherited SetSelStart(Control, NewStart);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class procedure TBrowserWSEdit.SetSelLength(const Control: TCustomEdit; NewLength: Integer);
 begin
   inherited SetSelLength(Control, NewLength);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class function TBrowserWSMemo.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;
@@ -539,28 +552,19 @@ end;
 class procedure TBrowserWSButton.SetBounds(const Control: TWinControl; const X, Y, Width, Height: Integer);
 begin
   TCDWSWinControl.SetBounds(Control, X, Y, Width, Height);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class procedure TBrowserWSButton.ShowHide(const Control: TWinControl);
 begin
   TCDWSWinControl.ShowHide(Control);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class procedure TBrowserWSButton.SetText(const Control: TWinControl; const Text: String);
 begin
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).CaptionElement.WriteJSPropertyUTF8String('textContent', Text);
-end;
-
-class function TBrowserWSButton.GetText(const Control: TWinControl; var Text: String): Boolean;
-begin
-  Result := FindEntry(Control) <> nil;
-  if Result then
-    Text := FindEntry(Control).CaptionElement.ReadJSPropertyUTF8String('textContent');
+  { Descendants such as TBitBtn have no DOM element; keep their drawn caption. }
+  if not SetDOMCaption(Control, Text) then TCDWSButton.SetText(Control, Text);
 end;
 
 class function TBrowserWSCheckBox.CreateHandle(const Control: TWinControl; const Params: TCreateParams): TLCLHandle;
@@ -576,40 +580,36 @@ end;
 class procedure TBrowserWSCheckBox.SetBounds(const Control: TWinControl; const X, Y, Width, Height: Integer);
 begin
   TCDWSWinControl.SetBounds(Control, X, Y, Width, Height);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class procedure TBrowserWSCheckBox.ShowHide(const Control: TWinControl);
 begin
   TCDWSWinControl.ShowHide(Control);
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).Sync;
+  SyncControl(Control);
 end;
 
 class procedure TBrowserWSCheckBox.SetText(const Control: TWinControl; const Text: String);
 begin
-  if FindEntry(Control) <> nil then
-    FindEntry(Control).CaptionElement.WriteJSPropertyUTF8String('textContent', Text);
-end;
-
-class function TBrowserWSCheckBox.GetText(const Control: TWinControl; var Text: String): Boolean;
-begin
-  Result := FindEntry(Control) <> nil;
-  if Result then
-    Text := FindEntry(Control).CaptionElement.ReadJSPropertyUTF8String('textContent');
+  SetDOMCaption(Control, Text);
 end;
 
 class function TBrowserWSCheckBox.RetrieveState(const Control: TCustomCheckBox): TCheckBoxState;
+var
+  Entry: TDOMControl;
 begin
-  if (FindEntry(Control) <> nil) and FindEntry(Control).Element.ReadJSPropertyBoolean('checked') then Result := cbChecked
+  Entry := FindEntry(Control);
+  if (Entry <> nil) and Entry.Element.ReadJSPropertyBoolean('checked') then Result := cbChecked
   else Result := cbUnchecked;
 end;
 
 class procedure TBrowserWSCheckBox.SetState(const Control: TCustomCheckBox; const State: TCheckBoxState);
+var
+  Entry: TDOMControl;
 begin
-  if FindEntry(Control) = nil then Exit;
-  FindEntry(Control).Element.WriteJSPropertyBoolean('checked', State = cbChecked);
-  FindEntry(Control).Element.WriteJSPropertyBoolean('indeterminate', State = cbGrayed);
+  Entry := FindEntry(Control);
+  if Entry = nil then Exit;
+  Entry.Element.WriteJSPropertyBoolean('checked', State = cbChecked);
+  Entry.Element.WriteJSPropertyBoolean('indeterminate', State = cbGrayed);
 end;
 end.

@@ -170,6 +170,8 @@ begin
     if Result and Assigned(OnShowSelectItemDialogResult) then
       OnShowSelectItemDialogResult(Selected);
   finally
+    { The handler belongs to the combobox that opened this dialog. }
+    OnShowSelectItemDialogResult := nil;
     Data.Free;
   end;
 end;

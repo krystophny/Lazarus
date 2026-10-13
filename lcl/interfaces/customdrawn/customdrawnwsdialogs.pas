@@ -53,10 +53,6 @@ type
 
   TCDWSFileDialog = class(TWSFileDialog)
   published
-    {$ifdef CD_Wasm}
-    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
-    class procedure ShowModal(const ACommonDialog: TCommonDialog); override;
-    {$endif}
 {    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
     class procedure ShowModal(const ACommonDialog: TCommonDialog); override;}
   end;
@@ -65,20 +61,12 @@ type
 
   TCDWSOpenDialog = class(TWSOpenDialog)
   published
-    {$ifdef CD_Wasm}
-    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
-    class procedure ShowModal(const ACommonDialog: TCommonDialog); override;
-    {$endif}
   end;
 
   { TCDWSSaveDialog }
 
   TCDWSSaveDialog = class(TWSSaveDialog)
   published
-    {$ifdef CD_Wasm}
-    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
-    class procedure ShowModal(const ACommonDialog: TCommonDialog); override;
-    {$endif}
   end;
 
   { TCDWSSelectDirectoryDialog }
@@ -93,10 +81,6 @@ type
 
   TCDWSColorDialog = class(TWSColorDialog)
   published
-    {$ifdef CD_Wasm}
-    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
-    class procedure ShowModal(const ACommonDialog: TCommonDialog); override;
-    {$endif}
 {    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
     class procedure ShowModal(const ACommonDialog: TCommonDialog); override;}
   end;
@@ -111,10 +95,6 @@ type
 
   TCDWSFontDialog = class(TWSFontDialog)
   published
-    {$ifdef CD_Wasm}
-    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
-    class procedure ShowModal(const ACommonDialog: TCommonDialog); override;
-    {$endif}
 {    class function CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle; override;
     class procedure ShowModal(const ACommonDialog: TCommonDialog); override;}
   end;
@@ -125,6 +105,8 @@ implementation
 {$ifdef CD_Wasm}
 uses FPJSON, JSONParser;
 
+{ File, color and font dialogs have no registration of their own and use this
+  class through TCommonDialog. }
 function BrowserCommonDialog(Request: PChar; RequestLength: LongInt;
   Response: PChar; Capacity: LongInt): LongInt; external 'lcl' name 'common_dialog';
 
@@ -155,7 +137,8 @@ begin
       Request.Add('filter', FileDialog.Filter);
       Request.Add('filterIndex', FileDialog.FilterIndex);
       Request.Add('defaultExt', FileDialog.DefaultExt);
-      Request.Add('multiple', ofAllowMultiSelect in TOpenDialog(FileDialog).Options);
+      Request.Add('multiple', (FileDialog is TOpenDialog)
+        and (ofAllowMultiSelect in TOpenDialog(FileDialog).Options));
     end
     else if ACommonDialog is TColorDialog then
     begin
@@ -211,30 +194,6 @@ begin
   end;
 end;
 
-class function TCDWSFileDialog.CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle;
-begin Result := TCDWSCommonDialog.CreateHandle(ACommonDialog); end;
-class procedure TCDWSFileDialog.ShowModal(const ACommonDialog: TCommonDialog);
-begin TCDWSCommonDialog.ShowModal(ACommonDialog); end;
-
-class function TCDWSOpenDialog.CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle;
-begin Result := TCDWSCommonDialog.CreateHandle(ACommonDialog); end;
-class procedure TCDWSOpenDialog.ShowModal(const ACommonDialog: TCommonDialog);
-begin TCDWSCommonDialog.ShowModal(ACommonDialog); end;
-
-class function TCDWSSaveDialog.CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle;
-begin Result := TCDWSCommonDialog.CreateHandle(ACommonDialog); end;
-class procedure TCDWSSaveDialog.ShowModal(const ACommonDialog: TCommonDialog);
-begin TCDWSCommonDialog.ShowModal(ACommonDialog); end;
-
-class function TCDWSColorDialog.CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle;
-begin Result := TCDWSCommonDialog.CreateHandle(ACommonDialog); end;
-class procedure TCDWSColorDialog.ShowModal(const ACommonDialog: TCommonDialog);
-begin TCDWSCommonDialog.ShowModal(ACommonDialog); end;
-
-class function TCDWSFontDialog.CreateHandle(const ACommonDialog: TCommonDialog): TLCLHandle;
-begin Result := TCDWSCommonDialog.CreateHandle(ACommonDialog); end;
-class procedure TCDWSFontDialog.ShowModal(const ACommonDialog: TCommonDialog);
-begin TCDWSCommonDialog.ShowModal(ACommonDialog); end;
 {$endif}
 
 end.
