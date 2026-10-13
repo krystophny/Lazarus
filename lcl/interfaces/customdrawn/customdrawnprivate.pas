@@ -69,6 +69,11 @@ type
   end;
 
   TCDIntfComboBox = class(TCDComboBox)
+  {$ifdef CPUWASM32}
+  protected
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure ShowSelectItemDialogResult(ASelectedItem: Integer); override;
+  {$endif}
   public
     LCLControl: TCustomComboBox;
   end;
@@ -159,8 +164,12 @@ type
 // These are default message handlers which backends might use to simplify their code
 // They convert a message sent to the form into a message to the correct sub-control
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
-procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
+procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 procedure CallbackMouseMove(AWindowHandle: TCDForm; x, y: Integer; ShiftState: TShiftState = []);
+{$ifdef CPUWASM32}
+procedure CallbackMouseLeave(AWindowHandle: TCDForm);
+procedure ForgetBrowserControl(AControl: TWinControl);
+{$endif}
 procedure CallbackKeyDown(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyUp(AWindowHandle: TCDForm; AKey: Word);
 procedure CallbackKeyChar(AWindowHandle: TCDForm; AKeyData: Word; AChar: TUTF8Char);
@@ -169,6 +178,17 @@ function IsIntfControl(AControl: TWinControl): Boolean;
 implementation
 
 uses customdrawnint, LCLMessageGlue, customdrawndrawers, Clipbrd;
+
+{$ifdef CPUWASM32}
+var
+  BrowserMouseTarget: TWinControl = nil;
+
+procedure ForgetBrowserControl(AControl: TWinControl);
+begin
+  CDForgetBrowserFocusReveal(AControl);
+  if BrowserMouseTarget = AControl then BrowserMouseTarget := nil;
+end;
+{$endif}
 
 procedure CallbackMouseUp(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
 var
@@ -220,9 +240,36 @@ begin
   AWindowHandle.IsScrolling := False;
 end;
 
-procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []);
+{ Keep document focus when clicking chrome unless it explicitly accepts focus. }
+function IsControlBar(AControl: TWinControl): Boolean;
+begin
+  Result := ((AControl is TToolBar) or (AControl is TPanel)
+    or (AControl is TStatusBar)) and not AControl.TabStop;
+end;
+
+{$ifdef CPUWASM32}
+{ Native backends manage pointer tracking through their window system. }
+procedure BrowserFireMouseLeave;
+begin
+  if (BrowserMouseTarget = nil) or not BrowserMouseTarget.HandleAllocated then Exit;
+  BrowserMouseTarget.Perform(CM_MOUSELEAVE, WParam(0), LParam(0));
+  if BrowserMouseTarget is TCustomControl then
+    LCLIntf.InvalidateRect(BrowserMouseTarget.Handle, nil, False);
+  BrowserMouseTarget := nil;
+end;
+
+procedure CallbackMouseLeave(AWindowHandle: TCDForm);
+begin
+  BrowserFireMouseLeave;
+  if AWindowHandle <> nil then
+    LCLIntf.InvalidateRect(HWND(AWindowHandle), nil, False);
+end;
+{$endif}
+
+procedure CallbackMouseDown(AWindowHandle: TCDForm; x, y: Integer; Button: TMouseButton; ShiftState: TShiftState = []; ClickCount: Byte = 1);
 var
   lTarget: TWinControl;
+  lMouseTarget: TWinControl;
   lIntfTarget: TWinControl = nil;
   lEventPos: TPoint;
   lMsg: TLMessage;
@@ -244,23 +291,38 @@ begin
   GetCursorPos(MouseDownPos);}
 
   lTarget := FindControlWhichReceivedEvent(AWindowHandle.LCLForm, AWindowHandle.Children, x, y);
+  lMouseTarget := lTarget;
   //DebugLn(Format('CallbackMouseDown lEventPos X=%d y=%d lTarget %s:%s',
   //  [lEventPos.X, lEventPos.y, lTarget.Name, lTarget.ClassName]));
   AWindowHandle.LastMouseDownControl := lTarget;
-  AWindowHandle.FocusedControl := lTarget;
-  AWindowHandle.FocusedIntfControl := nil;
+  { Decorative controls must not steal the focused editor's keyboard input. }
+  if (lTarget <> nil) and not IsControlBar(lTarget) then
+  begin
+    AWindowHandle.FocusedControl := lTarget;
+    AWindowHandle.FocusedIntfControl := nil;
+  end;
   lEventPos := FormPosToControlPos(lTarget, x, y);
 
-  LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
+  if ClickCount > 1 then
+    LCLSendMouseMultiClickMsg(lTarget, lEventPos.x, lEventPos.y, Button, ClickCount, ShiftState)
+  else
+    LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
 
   // If this is a interface control, send the message to the main LCL control too
   if IsIntfControl(lTarget) then
   begin
     lIntfTarget := lTarget;
-    AWindowHandle.FocusedIntfControl := lTarget;
+    { An injected control's callback may explicitly move focus. Preserve it. }
+    if (AWindowHandle.FocusedControl = lMouseTarget)
+      and ((AWindowHandle.FocusedIntfControl = nil)
+        or (AWindowHandle.FocusedIntfControl = lIntfTarget)) then
+      AWindowHandle.FocusedIntfControl := lIntfTarget;
     lTarget := lTarget.Parent;
 
-    LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
+    if ClickCount > 1 then
+      LCLSendMouseMultiClickMsg(lTarget, lEventPos.x, lEventPos.y, Button, ClickCount, ShiftState)
+    else
+      LCLSendMouseDownMsg(lTarget, lEventPos.x, lEventPos.y, Button, ShiftState);
   end;
 
   { Cancel any in-flight tooltip hint -- LM_BUTTONDOWN goes through
@@ -269,8 +331,14 @@ begin
   lMsg.Msg := LM_LBUTTONDOWN;
   NotifyApplicationUserInput(lTarget, lMsg);
 
-  // If the target is focusable, a mouse down will give it focus
-  CDWidgetset.CDSetFocusToControl(lTarget, lIntfTarget);
+  { Mouse down normally gives the target focus. Keep any explicit focus change
+    made while dispatching its handlers. }
+  if (AWindowHandle.FocusedControl = lMouseTarget)
+    and (AWindowHandle.FocusedIntfControl = lIntfTarget) then
+  begin
+    if not IsControlBar(lTarget) then
+      CDWidgetset.CDSetFocusToControl(lTarget, lIntfTarget);
+  end;
 
   // Check if we are scrolling the form
   if lTarget = AWindowHandle.LCLForm then
@@ -297,6 +365,17 @@ begin
 
   lEventPos := FormPosToControlPos(lTarget, x, y);
   LCLSendMouseMoveMsg(lTarget, lEventPos.x, lEventPos.y, ShiftState);
+  {$ifdef CPUWASM32}
+  { CM_MOUSEENTER establishes the state needed by CMMouseLeave. }
+  if lTarget <> BrowserMouseTarget then
+  begin
+    BrowserFireMouseLeave;
+    BrowserMouseTarget := lTarget;
+    if lTarget.HandleAllocated then
+      lTarget.Perform(CM_MOUSEENTER, WParam(0), LParam(0));
+    CDWidgetSet.UpdateBrowserCursor(lTarget);
+  end;
+  {$endif}
 
   // If this is a interface control, send the message to the main LCL control too
   if IsIntfControl(lTarget) then
@@ -451,6 +530,11 @@ begin
     end;
   end;
 
+  {$ifdef CPUWASM32}
+  // Complete LCL's key processing, including default/cancel dialog buttons.
+  if AKey <> 0 then LCLSendKeyDownEvent(lTarget, AKey, 0, False, False);
+  {$endif}
+
   // If the control didn't eat the tab, then circle around controls
   // Shift+Tab circles in the opposite direction
   lIsTab := lIsTab and (AKey = VK_TAB);
@@ -502,6 +586,9 @@ begin
     lTarget := lTarget.Parent;
     LCLSendKeyUpEvent(lTarget, AKey, 0, True, False);
   end;
+  {$ifdef CPUWASM32}
+  if AKey <> 0 then LCLSendKeyUpEvent(lTarget, AKey, 0, False, False);
+  {$endif}
 end;
 
 procedure CallbackKeyChar(AWindowHandle: TCDForm; AKeyData: Word; AChar: TUTF8Char);
@@ -555,6 +642,37 @@ begin
     (AControl is TCDIntfSpinEdit)
     ;
 end;
+
+{$ifdef CPUWASM32}
+procedure TCDIntfComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  NewIndex: Integer;
+begin
+  if Key in [VK_UP, VK_DOWN] then
+  begin
+    if ssAlt in Shift then Exit;
+    if Shift <> [] then
+    begin
+      inherited KeyDown(Key, Shift);
+      Exit;
+    end;
+    NewIndex := ItemIndex;
+    if (Key = VK_DOWN) and (NewIndex < Items.Count - 1) then Inc(NewIndex)
+    else if (Key = VK_UP) and (NewIndex > 0) then Dec(NewIndex);
+    if NewIndex <> ItemIndex then ShowSelectItemDialogResult(NewIndex);
+    Key := 0;
+    Exit;
+  end;
+  inherited KeyDown(Key, Shift);
+end;
+
+procedure TCDIntfComboBox.ShowSelectItemDialogResult(ASelectedItem: Integer);
+begin
+  inherited ShowSelectItemDialogResult(ASelectedItem);
+  LCLSendChangedMsg(LCLControl);
+  LCLSendSelectionChangedMsg(LCLControl);
+end;
+{$endif}
 
 { TCDIntfEdit }
 

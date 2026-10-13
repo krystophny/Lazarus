@@ -116,7 +116,8 @@ function SetComboMinDropDownSize(Handle: HWND; MinItemsWidth, MinItemsHeight, Mi
 procedure SetDCOpacity(DC: HDC; AOpacity: Byte); {$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}
 procedure SetEventHandlerFlags(AHandler: PEventHandler; NewFlags: dword); {$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}
 procedure SetRubberBandRect(const ARubberBand: HWND; const ARect: TRect); {$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}
-function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint): Boolean;{$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}
+// ASelectedIndex sets the initial item when the widgetset supports it; -1 leaves it unspecified.
+function ShowSelectItemDialog(const AItems: TStrings; APos: TPoint; ASelectedIndex: Integer = -1): Boolean;{$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}
 function StretchMaskBlt(DestDC: HDC; X, Y, Width, Height: Integer; SrcDC: HDC; XSrc, YSrc, SrcWidth, SrcHeight: Integer; Mask: HBITMAP; XMask, YMask: Integer; Rop: DWORD): Boolean; {$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}
 
 function TextUTF8Out(DC: HDC; X, Y: Integer;  Str: PChar; Count: Longint): Boolean;  {$IFDEF IF_BASE_MEMBER}virtual;{$ENDIF}

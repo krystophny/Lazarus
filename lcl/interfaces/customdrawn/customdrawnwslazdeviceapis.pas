@@ -57,7 +57,7 @@ implementation
 
 { TCDWSLazDeviceAPIs }
 
-{$if defined(CD_Windows) or defined(CD_Cocoa) or defined(CD_X11) or defined(CD_Wayland)}
+{$if defined(CD_Windows) or defined(CD_Cocoa) or defined(CD_X11) or defined(CD_Wayland) or defined(CD_Wasm)}
 class procedure TCDWSLazDeviceAPIs.RequestPositionInfo(
   AMethod: TLazPositionMethod);
 begin
