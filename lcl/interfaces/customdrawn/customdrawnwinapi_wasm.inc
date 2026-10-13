@@ -180,15 +180,25 @@ function TCDWidgetSet.GetTextExtentExPoint(DC: HDC; Str: PChar; Count,
   ): Boolean;
 var
   I, Width, FontSize: Integer;
+  Complete: Boolean;
 begin
   Result := GetTextExtentPoint(DC, Str, Count, Size);
   FontSize := BrowserFontSize(DC);
   if MaxCount <> nil then MaxCount^ := 0;
+  Width := 0;
   for I := 1 to Count do
   begin
-    Width := BrowserMeasure(Str, I, FontSize);
+    { Measure complete UTF-8 sequences only; a byte inside a character keeps
+      the width before that character. }
+    Complete := (I = Count) or (Byte(Str[I]) and $C0 <> $80);
+    if Complete then Width := BrowserMeasure(Str, I, FontSize);
     if PartialWidths <> nil then PartialWidths[I-1] := Width;
-    if (MaxCount <> nil) and (Width <= MaxWidth) then MaxCount^ := I;
+    if not Complete then Continue;
+    if Width > MaxWidth then
+    begin
+      if PartialWidths = nil then Break;
+    end
+    else if MaxCount <> nil then MaxCount^ := I;
   end;
 end;
 

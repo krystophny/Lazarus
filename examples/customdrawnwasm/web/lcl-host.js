@@ -228,7 +228,8 @@ const imports = {
     const result = await commonDialog(JSON.parse(text(pointer,length)));
     if (result === null) return 0;
     const bytes = new TextEncoder().encode(JSON.stringify(result));
-    if (bytes.length >= capacity) throw new Error('Dialog response exceeds its buffer');
+    // Report an oversized selection as a cancelled dialog instead of failing the application.
+    if (bytes.length >= capacity) { console.error('Dialog response exceeds its buffer'); return 0; }
     new Uint8Array(instance.exports.memory.buffer, output, bytes.length).set(bytes);
     return bytes.length;
   }),
@@ -262,10 +263,11 @@ const buttonNames = {1:'OK', 2:'Cancel', 3:'Abort', 4:'Retry', 5:'Ignore', 6:'Ye
 function showDialog(options) {
   if (options.kind === 'select') return selectItemDialog(options);
   const dialog = document.createElement('dialog');
-  dialog.setAttribute('aria-label', options.caption || 'TpX');
+  const caption = options.caption || document.title;
+  dialog.setAttribute('aria-label', caption);
   dialog.style.cssText = 'max-width:min(600px,90vw);border:1px solid #a5b8ce;padding:20px;background:white;color:#203e69;font:15px system-ui';
   const heading = document.createElement('h2');
-  heading.textContent = options.caption || 'TpX';
+  heading.textContent = caption;
   const body = document.createElement('p');
   body.textContent = options.message || '';
   body.style.whiteSpace = 'pre-wrap';
@@ -346,7 +348,7 @@ function commonDialog(options) {
     field('file', 'Choose file', 'file').multiple = Boolean(options.multiple);
     field('related', 'Related files (optional)', 'file').multiple = true;
   }
-  if (options.kind==='save') field('filename', 'File name', 'text', options.filename || 'drawing.tpx');
+  if (options.kind==='save') field('filename', 'File name', 'text', options.filename || '');
   if (options.kind==='open' || options.kind==='save') {
     const label=document.createElement('label'); label.textContent='File type ';
     const select=document.createElement('select'); select.name='filterIndex';
