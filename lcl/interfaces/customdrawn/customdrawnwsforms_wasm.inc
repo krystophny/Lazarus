@@ -38,6 +38,8 @@ end;
 class procedure TCDWSCustomForm.DestroyHandle(const AWinControl: TWinControl);
 begin
   RemoveBrowserForm(TCDNonNativeForm(AWinControl.Handle));
+  { A modal loop waits for its form to become active again. }
+  BrowserActiveForm(PtrUInt(GetCurrentForm));
 end;
 
 class procedure TCDWSCustomForm.SetBorderIcons(const AForm: TCustomForm;
