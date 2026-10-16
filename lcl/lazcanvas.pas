@@ -36,11 +36,11 @@ interface
 
 uses
   // RTL
-  Classes, SysUtils, contnrs, Math,
+  Classes, SysUtils, contnrs, Math, Types,
   // FCL-Image
   fpimgcanv, fpcanvas, fpimage, clipping, pixtools, fppixlcanv,
   // LCL
-  IntfGraphics, LazRegions
+  IntfGraphics, LazRegions, GraphType
   {$if defined(lazcanvas_debug) or defined(lazcanvas_profiling)}
   , LazSysUtils, LazLoggerBase
   {$endif}
@@ -97,6 +97,7 @@ type
     FWindowOrg: TPoint; // already in absolute coords with BaseWindowOrg summed up
     GraphicStateList: TFPList; // TLazCanvasState
     function GetAssignedBrush: TFPCustomBrush;
+    function TryFillSolidRect(const Bounds: TRect; const Color: TFPColor): Boolean;
     function GetAssignedPen: TFPCustomPen;
     function GetAssignedFont: TFPCustomFont;
     function GetWindowOrg: TPoint;
@@ -298,9 +299,58 @@ begin
   end;
 end;
 
+function TLazCanvas.TryFillSolidRect(const Bounds: TRect;
+  const Color: TFPColor): Boolean;
+{$ifdef lazcanvas_new_fast_copy}
+var
+  DeviceBounds, Clip: TRect;
+  Y: Integer;
+  Scanline: PByte;
+  Pixel: DWord;
+{$endif}
+begin
+  Result := False;
+  {$ifdef lazcanvas_new_fast_copy}
+  if not (Image is TLazIntfImage) or
+    not (ImageFormat in [clfBGRA32, clfRGBA32, clfARGB32]) or
+    (TLazIntfImage(Image).DataDescription.LineOrder <> riloTopToBottom) then Exit;
+  if Clipping and (not (ClipRegion is TLazRegion) or
+    not TLazRegion(ClipRegion).IsSimpleRectRegion) then Exit;
+  DeviceBounds := Bounds;
+  SortRect(DeviceBounds);
+  OffsetRect(DeviceBounds, FWindowOrg.X, FWindowOrg.Y);
+  Clip := Rect(0, 0, Width - 1, Height - 1);
+  if Clipping then
+  begin
+    Clip.Left := Max(Clip.Left, TLazRegion(ClipRegion).Rect.Left);
+    Clip.Top := Max(Clip.Top, TLazRegion(ClipRegion).Rect.Top);
+    Clip.Right := Min(Clip.Right, TLazRegion(ClipRegion).Rect.Right);
+    Clip.Bottom := Min(Clip.Bottom, TLazRegion(ClipRegion).Rect.Bottom);
+  end;
+  DeviceBounds.Left := Max(DeviceBounds.Left, Clip.Left);
+  DeviceBounds.Top := Max(DeviceBounds.Top, Clip.Top);
+  DeviceBounds.Right := Min(DeviceBounds.Right, Clip.Right);
+  DeviceBounds.Bottom := Min(DeviceBounds.Bottom, Clip.Bottom);
+  Result := True;
+  if (DeviceBounds.Left > DeviceBounds.Right) or
+    (DeviceBounds.Top > DeviceBounds.Bottom) then Exit;
+  { Let the image encode the color, including channel order and alpha. }
+  Image.Colors[DeviceBounds.Left, DeviceBounds.Top] := Color;
+  Scanline := TLazIntfImage(Image).GetDataLineStart(DeviceBounds.Top);
+  Pixel := PDWord(Scanline + DeviceBounds.Left * 4)^;
+  for Y := DeviceBounds.Top to DeviceBounds.Bottom do
+  begin
+    Scanline := TLazIntfImage(Image).GetDataLineStart(Y);
+    FillDWord((Scanline + DeviceBounds.Left * 4)^,
+      DeviceBounds.Right - DeviceBounds.Left + 1, Pixel);
+  end;
+  {$endif}
+end;
+
 procedure TLazCanvas.DoRectangleFill(const Bounds: TRect);
 var
   b : TRect;
+
 begin
   b := Bounds;
   SortRect (b);
@@ -319,6 +369,21 @@ begin
     FillColor(Brush.FPColor, True);
     Exit;
   end;
+
+  { Solid fills do not depend on the original rectangle for pattern alignment.
+    Bound the pixel loop to the damaged device rectangle before drawing. }
+  if (Brush.Style = bsSolid) and Clipping and
+    (ClipRegion is TLazRegion) and TLazRegion(ClipRegion).IsSimpleRectRegion then
+  begin
+    b.Left := Max(b.Left, TLazRegion(ClipRegion).Rect.Left - FWindowOrg.X);
+    b.Top := Max(b.Top, TLazRegion(ClipRegion).Rect.Top - FWindowOrg.Y);
+    b.Right := Min(b.Right, TLazRegion(ClipRegion).Rect.Right - FWindowOrg.X);
+    b.Bottom := Min(b.Bottom, TLazRegion(ClipRegion).Rect.Bottom - FWindowOrg.Y);
+    if (b.Left > b.Right) or (b.Top > b.Bottom) then Exit;
+  end;
+
+  if (Brush.Style = bsSolid) and (DrawingMode = dmOpaque) and
+    TryFillSolidRect(b, Brush.FPColor) then Exit;
 
   case Brush.style of
     bsSolid : FillRectangleColor (self, b.left,b.top, b.right,b.bottom);
@@ -518,6 +583,10 @@ procedure TLazCanvas.DoLine(x1, y1, x2, y2: integer);
   end;
 
 begin
+  if (Pen.Style = psSolid) and (Pen.Mode = pmCopy) and
+    (DrawingMode = dmOpaque) and (Pen.Width <= 1) and
+    ((x1 = x2) or (y1 = y2)) and
+    TryFillSolidRect(Rect(x1, y1, x2, y2), Pen.FPColor) then Exit;
 { We can are not clip here because we clip in each drawn pixel
   or introduce a more complex algorithm to take into account lazregions
   if Clipping then
@@ -776,7 +845,9 @@ procedure TLazCanvas.CanvasCopyRect(ASource: TFPCustomCanvas; const ADestX, ADes
 var
   ALazSource: TLazCanvas absolute ASource;
   x, y, CurDestX, CurDestY, CurSrcX, CurSrcY: Integer;
-  lDrawWidth, lDrawHeight: Integer;
+  lDrawWidth, lDrawHeight, StartX, StartY: Integer;
+  SimpleClip: Boolean;
+  Clip: TRect;
   lColor: TFPColor;
   {$IFDEF lazcanvas_profiling}
   lTimeStart: TDateTime;
@@ -784,11 +855,19 @@ var
   {$ifdef lazcanvas_new_fast_copy}
   lScanlineSrc, lScanlineDest: PByte;
   lBytesPerPixel: Byte;
+  SourceStride, DestStride, CopyBytes: PtrInt;
+  OpaqueARGB: Boolean;
+  SourceDescription, DestDescription: TRawImageDescription;
   {$ENDIF}
 begin
   {$IFDEF lazcanvas_profiling}
   lTimeStart := NowUTC();
   {$ENDIF}
+
+  StartX := Max(0, Max(-ASourceX, -ADestX - FWindowOrg.X));
+  StartY := Max(0, Max(-ASourceY, -ADestY - FWindowOrg.Y));
+  SimpleClip := Clipping and (ClipRegion is TLazRegion) and
+    TLazRegion(ClipRegion).IsSimpleRectRegion;
 
   // Take care not to draw outside the source and also not outside the destination area
   lDrawWidth := Min(Self.Width - ADestX - FWindowOrg.X, ASource.Width - ASourceX);
@@ -796,12 +875,47 @@ begin
   lDrawWidth := Min(lDrawWidth, ASourceWidth);
   lDrawHeight := Min(lDrawHeight, ASourceHeight);
 
+  if SimpleClip then
+  begin
+    { LazRegion rectangles include their right and bottom edges. Clip in
+      device coordinates before reading pixels or copying scanlines. }
+    Clip := TLazRegion(ClipRegion).Rect;
+    StartX := Max(StartX, Clip.Left - ADestX - FWindowOrg.X);
+    StartY := Max(StartY, Clip.Top - ADestY - FWindowOrg.Y);
+    lDrawWidth := Min(lDrawWidth, Clip.Right + 1 - ADestX - FWindowOrg.X);
+    lDrawHeight := Min(lDrawHeight, Clip.Bottom + 1 - ADestY - FWindowOrg.Y);
+  end;
+  if (StartX >= lDrawWidth) or (StartY >= lDrawHeight) then Exit;
+
   {$ifdef lazcanvas_new_fast_copy}
+  { Compatible opaque bitmaps reserve the ARGB alpha byte instead of using it.
+    Copy their color bytes directly and supply the opaque alpha value. }
+  OpaqueARGB := False;
+  {$ifdef ENDIAN_LITTLE}
+  if (ASource is TLazCanvas) and (Image is TLazIntfImage) and
+    (ALazSource.Image is TLazIntfImage) and (ImageFormat = clfARGB32) then
+  begin
+    SourceDescription := TLazIntfImage(ALazSource.Image).DataDescription;
+    DestDescription := TLazIntfImage(Image).DataDescription;
+    if (SourceDescription.Depth = 24) and (SourceDescription.BitsPerPixel = 32)
+      and (SourceDescription.AlphaPrec = 0) then
+    begin
+      SourceDescription.Depth := 32;
+      SourceDescription.AlphaPrec := 8;
+      SourceDescription.Width := DestDescription.Width;
+      SourceDescription.Height := DestDescription.Height;
+      SourceDescription.LineEnd := DestDescription.LineEnd;
+      OpaqueARGB := SourceDescription.IsEqual(DestDescription);
+    end;
+  end;
+  {$endif}
   // If the formats match, make a fast copy of the data itself, without pixel conversion
-  if not Clipping and (ASource is TLazCanvas) and
+  if (not Clipping or SimpleClip) and (ASource is TLazCanvas) and
      (Image is TLazIntfImage) and (ALazSource.Image is TLazIntfImage) and
      (ImageFormat in [clfRGB24, clfRGB24UpsideDown, clfBGR24, clfBGRA32, clfRGBA32, clfARGB32]) and
-     (ImageFormat = ALazSource.ImageFormat) then
+     ((ImageFormat = ALazSource.ImageFormat) or OpaqueARGB) and
+     (TLazIntfImage(Image).DataDescription.LineOrder = riloTopToBottom) and
+     (TLazIntfImage(ALazSource.Image).DataDescription.LineOrder = riloTopToBottom) then
   begin
     case ImageFormat of
       clfRGB24, clfRGB24UpsideDown, clfBGR24: lBytesPerPixel := 3;
@@ -810,36 +924,41 @@ begin
       lBytesPerPixel := 4;
     end;
 
-    for y := 0 to lDrawHeight - 1 do
+    lScanlineSrc := TLazIntfImage(ALazSource.Image).GetDataLineStart(ASourceY + StartY);
+    lScanlineDest := TLazIntfImage(Image).GetDataLineStart(ADestY + StartY + FWindowOrg.Y);
+    if (lScanlineSrc = nil) or (lScanlineDest = nil) then Exit;
+    Inc(lScanlineSrc, (ASourceX + StartX) * lBytesPerPixel);
+    Inc(lScanlineDest, (ADestX + FWindowOrg.X + StartX) * lBytesPerPixel);
+    SourceStride := TLazIntfImage(ALazSource.Image).DataDescription.BytesPerLine;
+    DestStride := TLazIntfImage(Image).DataDescription.BytesPerLine;
+    CopyBytes := lBytesPerPixel * (lDrawWidth - StartX);
+    for y := StartY to lDrawHeight - 1 do
     begin
-      CurDestY := ADestY + y + FWindowOrg.Y;
-      if CurDestY >= Height then Continue;
-      CurSrcY := ASourceY + y;
-
-      lScanlineSrc := TLazIntfImage(ALazSource.Image).GetDataLineStart(CurSrcY);
-      lScanlineDest := TLazIntfImage(Image).GetDataLineStart(CurDestY);
-      if (lScanlineSrc = nil) or (lScanlineDest = nil) then Break;
-      Inc(lScanlineSrc, (ASourceX)*lBytesPerPixel);
-      Inc(lScanlineDest, (ADestX + FWindowOrg.X)*lBytesPerPixel);
-
-      move(lScanlineSrc^, lScanlineDest^, lBytesPerPixel * lDrawWidth);
+      { A vertical damage strip often contains exactly one 32-bit pixel. }
+      if OpaqueARGB then
+        for x := 0 to CopyBytes div SizeOf(DWord) - 1 do
+          PDWord(lScanlineDest + x * SizeOf(DWord))^ :=
+            PDWord(lScanlineSrc + x * SizeOf(DWord))^ or $FF
+      else if CopyBytes = SizeOf(DWord) then
+        PDWord(lScanlineDest)^ := PDWord(lScanlineSrc)^
+      else
+        Move(lScanlineSrc^, lScanlineDest^, CopyBytes);
+      Inc(lScanlineSrc, SourceStride);
+      Inc(lScanlineDest, DestStride);
     end;
   end
   // General case of copying
   else
   {$endif}
   begin
-    for y := 0 to lDrawHeight - 1 do
+    for y := StartY to lDrawHeight - 1 do
     begin
-      for x := 0 to lDrawWidth - 1 do
+      for x := StartX to lDrawWidth - 1 do
       begin
         CurDestX := ADestX + x;
         CurDestY := ADestY + y;
         CurSrcX := ASourceX + x;
         CurSrcY := ASourceY + y;
-
-        // Never draw outside the destination
-        if (CurDestX < 0) or (CurDestY < 0) then Continue;
 
         lColor := ASource.Colors[CurSrcX, CurSrcY];
         Self.Colors[CurDestX, CurDestY] := lColor;
