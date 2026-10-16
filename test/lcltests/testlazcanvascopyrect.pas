@@ -43,6 +43,7 @@ type
     procedure ClippedAxisLine;
     procedure AlphaFill;
     procedure OpaqueARGBBitmap;
+    procedure FullImageFill;
   end;
 
 implementation
@@ -259,6 +260,20 @@ begin
       end
       else
         AssertEquals('outside opaque copy clip', 0, FDestImage.Colors[X,Y].Red);
+end;
+
+procedure TTestLazCanvasCopyRect.FullImageFill;
+var X,Y: Integer;
+begin
+  FDestCanvas.ImageFormat := clfOther;
+  FDestCanvas.Clipping := False;
+  FDestCanvas.Brush.FPColor := colRed;
+  FDestCanvas.Writes := 0;
+  FDestCanvas.FillRect(0,0,8,8);
+  AssertTrue('full 32-bit fill avoids per-pixel canvas writes', FDestCanvas.Writes <= 1);
+  for Y := 0 to 7 do
+    for X := 0 to 7 do
+      AssertEquals('filled full image', $FFFF, FDestImage.Colors[X,Y].Red);
 end;
 
 initialization

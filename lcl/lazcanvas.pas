@@ -312,7 +312,7 @@ begin
   Result := False;
   {$ifdef lazcanvas_new_fast_copy}
   if not (Image is TLazIntfImage) or
-    not (ImageFormat in [clfBGRA32, clfRGBA32, clfARGB32]) or
+    (TLazIntfImage(Image).DataDescription.BitsPerPixel <> 32) or
     (TLazIntfImage(Image).DataDescription.LineOrder <> riloTopToBottom) then Exit;
   if Clipping and (not (ClipRegion is TLazRegion) or
     not TLazRegion(ClipRegion).IsSimpleRectRegion) then Exit;
@@ -366,7 +366,9 @@ begin
      and (Brush.Style = bsSolid) and (FWindowOrg.X = 0) and (FWindowOrg.Y = 0)
      and ((Clipping=False) {or cliprect=entire area}) then
   begin
-    FillColor(Brush.FPColor, True);
+    if (DrawingMode <> dmOpaque) or
+      not TryFillSolidRect(b, Brush.FPColor) then
+      FillColor(Brush.FPColor, True);
     Exit;
   end;
 
